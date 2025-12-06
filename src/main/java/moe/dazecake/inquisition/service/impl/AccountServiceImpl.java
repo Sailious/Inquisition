@@ -151,17 +151,11 @@ public class AccountServiceImpl implements AccountService {
             account.setFreeze(0);
         }
         //插队检查
-        for (Long userId : dynamicInfo.getWaitUserList()) {
-            if (Objects.equals(userId, id)) {
-                var freeListIterator = dynamicInfo.getWaitUserList().iterator();
-                while (freeListIterator.hasNext()) {
-                    var insertTask = freeListIterator.next();
-                    if (insertTask.equals(id)) {
-                        freeListIterator.remove();
-                        dynamicInfo.getWaitUserList().add(0, insertTask);
-                        return "插队成功";
-                    }
-                }
+        synchronized (dynamicInfo.getWaitUserList()) {
+            if (dynamicInfo.getWaitUserList().contains(id)) {
+                dynamicInfo.getWaitUserList().remove(id);
+                dynamicInfo.getWaitUserList().add(0, id);
+                return "插队成功";
             }
         }
         //上锁检查
@@ -177,7 +171,11 @@ public class AccountServiceImpl implements AccountService {
             }
         }
         //执行
-        dynamicInfo.getWaitUserList().add(0, account.getId());
+        synchronized (dynamicInfo.getWaitUserList()) {
+            if (!dynamicInfo.getWaitUserList().contains(account.getId())) {
+                dynamicInfo.getWaitUserList().add(0, account.getId());
+            }
+        }
         dynamicInfo.setUserSanZero(account.getId());
         account = accountMapper.selectById(id);
         account.setRefresh(account.getRefresh() - 1);

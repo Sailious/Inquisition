@@ -59,18 +59,19 @@ public class DynamicInfo extends MemoryInfo {
     //获取所有等待队列详细信息
     public ArrayList<AccountEntity> getAllWaitUserInfo() {
         if (this.waitUserList.size() != 0) {
-            var waitTasks = new ArrayList<>(accountMapper.selectBatchIds(waitUserList));
+            var waitTasksMap = accountMapper.selectBatchIds(waitUserList);
+            var result = new ArrayList<AccountEntity>();
             waitUserList.forEach(
                     it -> {
-                        for (AccountEntity waitTask : waitTasks) {
+                        for (AccountEntity waitTask : waitTasksMap) {
                             if (it.equals(waitTask.getId())) {
-                                waitTasks.add(waitTask);
+                                result.add(waitTask);
                                 break;
                             }
                         }
                     }
             );
-            return waitTasks;
+            return result;
         } else {
             return new ArrayList<>();
         }

@@ -73,6 +73,11 @@ public class TaskServiceImpl implements TaskService {
             return Result.unauthorized("设备未授权");
         }
 
+        if (device.getWorkScope().isEmpty()) {
+            device.getWorkScope().add("daily");
+            deviceMapper.updateById(device);
+        }
+
         //重复请求检查
         for (Long worker : dynamicInfo.getWorkUserList()) {
             if (dynamicInfo.getWorkUserInfoMap().get(worker).getDeviceToken().equals(deviceToken)) {
@@ -81,8 +86,9 @@ public class TaskServiceImpl implements TaskService {
         }
 
         //任务上锁
-        if (!dynamicInfo.getWaitUserList().isEmpty()) {
-            var account = new AccountEntity();
+        synchronized (dynamicInfo.getWaitUserList()) {
+            if (!dynamicInfo.getWaitUserList().isEmpty()) {
+                var account = new AccountEntity();
 
             //检查任务是否达到下发标准
             var iterator = dynamicInfo.getWaitUserList().iterator();
@@ -91,7 +97,7 @@ public class TaskServiceImpl implements TaskService {
                 account = accountMapper.selectById(iterator.next());
 
                 //删除检查
-                if (account.getDelete() == 1 || account.getExpireTime().isAfter(LocalDateTime.now())) {
+                if (account.getDelete() == 1 || account.getExpireTime().isBefore(LocalDateTime.now())) {
                     dynamicInfo.getUserSanInfoMap().remove(account.getId());
                     dynamicInfo.getFreezeUserInfoMap().remove(account.getId());
                     iterator.remove();
@@ -166,8 +172,9 @@ public class TaskServiceImpl implements TaskService {
 
             return Result.success(AccountConvert.INSTANCE.toAccountDTO(account), "获取成功");
 
-        } else {
-            return Result.success("待分配队列为空");
+            } else {
+                return Result.success("待分配队列为空");
+            }
         }
     }
 
@@ -257,12 +264,12 @@ public class TaskServiceImpl implements TaskService {
     public Result<String> tempInsertTask(Long id) {
         Result<String> result = new Result<>();
 
-        dynamicInfo.getWaitUserList().forEach(account -> {
-            if (account.equals(id)) {
-                dynamicInfo.getWaitUserList().remove(account);
-                dynamicInfo.getWaitUserList().add(0, account);
+        synchronized (dynamicInfo.getWaitUserList()) {
+            if (dynamicInfo.getWaitUserList().contains(id)) {
+                dynamicInfo.getWaitUserList().remove(id);
+                dynamicInfo.getWaitUserList().add(0, id);
             }
-        });
+        }
 
         return result.setCode(200)
                 .setMsg("插队成功")
@@ -289,16 +296,18 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Result<String> forceLoadAllTask() {
-        dynamicInfo.getWaitUserList().clear();
-        dynamicInfo.getWaitUserList().addAll(
-                accountMapper.selectList(
-                        Wrappers.<AccountEntity>lambdaQuery()
-                                .eq(AccountEntity::getDelete, 0)
-                                .eq(AccountEntity::getFreeze, 0)
-                                .eq(AccountEntity::getTaskType, "daily")
-                                .ge(AccountEntity::getExpireTime, LocalDateTime.now())
-                ).stream().map(AccountEntity::getId).collect(Collectors.toList())
-        );
+        synchronized (dynamicInfo.getWaitUserList()) {
+            dynamicInfo.getWaitUserList().clear();
+            dynamicInfo.getWaitUserList().addAll(
+                    accountMapper.selectList(
+                            Wrappers.<AccountEntity>lambdaQuery()
+                                    .eq(AccountEntity::getDelete, 0)
+                                    .eq(AccountEntity::getFreeze, 0)
+                                    .eq(AccountEntity::getTaskType, "daily")
+                                    .ge(AccountEntity::getExpireTime, LocalDateTime.now())
+                    ).stream().map(AccountEntity::getId).distinct().collect(Collectors.toList())
+            );
+        }
 
         //记录日志
         logService.logInfo("任务列表刷新", "管理员强制刷新了任务队列");
@@ -592,12 +601,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public void forceHaltTask(Long id) {
         synchronized (dynamicInfo.getWaitUserList()) {
-            for (Long waiter : dynamicInfo.getWaitUserList()) {
-                if (waiter.equals(id)) {
-                    dynamicInfo.getWaitUserList().remove(waiter);
-                    break;
-                }
-            }
+            dynamicInfo.getWaitUserList().remove(id);
         }
         synchronized (dynamicInfo.getWorkUserList()) {
             for (Long worker : dynamicInfo.getWorkUserList()) {

@@ -220,14 +220,14 @@ public class ProUserServiceImpl implements ProUserService {
                 return Result.success("该用户已经在作战中");
             }
         }
-        for (Long waiter : dynamicInfo.getWaitUserList()) {
-            if (waiter.equals(userID)) {
-                dynamicInfo.getWaitUserList().remove(waiter);
-                dynamicInfo.getWaitUserList().add(0, waiter);
+        synchronized (dynamicInfo.getWaitUserList()) {
+            if (dynamicInfo.getWaitUserList().contains(userID)) {
+                dynamicInfo.getWaitUserList().remove(userID);
+                dynamicInfo.getWaitUserList().add(0, userID);
                 return Result.success("插队成功");
             }
+            dynamicInfo.getWaitUserList().add(0, userID);
         }
-        dynamicInfo.getWaitUserList().add(0, userID);
         dynamicInfo.setUserSanZero(userID);
         return Result.success("立即作战成功");
     }

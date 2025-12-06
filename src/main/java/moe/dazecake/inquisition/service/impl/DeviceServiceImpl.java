@@ -44,7 +44,9 @@ public class DeviceServiceImpl implements DeviceService {
 
     @Override
     public void addCommonDevice(AddCommonDeviceDTO addCommonDeviceDTO) {
-        addDevice(DeviceConvert.INSTANCE.toAddDeviceDTO(addCommonDeviceDTO));
+        var dto = DeviceConvert.INSTANCE.toAddDeviceDTO(addCommonDeviceDTO);
+        dto.getWorkScope().add("daily");
+        addDevice(dto);
     }
 
     @Override
