@@ -59,7 +59,6 @@ public class UserController {
                 createUserByPayDTO.getServer());
     }
 
-
     @Operation(summary = "登陆我的账号")
     @PostMapping("/userLogin")
     public Result<UserLoginVO> userLogin(@RequestBody UserLoginDTO userLoginDTO) {
@@ -77,7 +76,7 @@ public class UserController {
     @Operation(summary = "更新自己的账号")
     @PostMapping("/updateMyAccount")
     public Result<String> updateMyAccount(@RequestHeader("Authorization") String token,
-                                          @RequestBody AccountDTO accountDTO) {
+            @RequestBody AccountDTO accountDTO) {
         return userService.updateMyAccount(JWTUtils.getId(token), accountDTO);
     }
 
@@ -85,7 +84,7 @@ public class UserController {
     @Operation(summary = "更新账号密码")
     @PostMapping("/updateAccountAndPassword")
     public Result<String> updateAccountAndPassword(@RequestHeader("Authorization") String token,
-                                                   @RequestBody UpdateAccountAndPasswordDTO updateAccountAndPasswordDTO) {
+            @RequestBody UpdateAccountAndPasswordDTO updateAccountAndPasswordDTO) {
         return userService.updateAccountAndPassword(JWTUtils.getId(token),
                 updateAccountAndPasswordDTO.getAccount(),
                 updateAccountAndPasswordDTO.getPassword(),
@@ -110,8 +109,8 @@ public class UserController {
     @Operation(summary = "查询我的日志")
     @GetMapping("/showMyLog")
     public Result<PageQueryVO<LogDTO>> showMyLog(@RequestHeader("Authorization") String token,
-                                                 Long current,
-                                                 Long size) {
+            Long current,
+            Long size) {
         return userService.showMyLog(JWTUtils.getAccount(token), current, size);
     }
 
@@ -133,7 +132,7 @@ public class UserController {
     @Operation(summary = "使用CDK")
     @PostMapping("/useCDK")
     public synchronized Result<String> useCDK(@RequestHeader("Authorization") String token,
-                                              @RequestBody RawCDKDTO rawCDKDTO) {
+            @RequestBody RawCDKDTO rawCDKDTO) {
         return userService.useCDK(JWTUtils.getId(token), rawCDKDTO.getCdk());
     }
 
@@ -146,7 +145,7 @@ public class UserController {
 
     @Operation(summary = "获取微信推送回调")
     @PostMapping("/getWechatCallback")
-    public void getWechatCallback(@RequestBody WechatCallbackEntity wechatCallback) {
+    public Result<String> getWechatCallback(@RequestBody WechatCallbackEntity wechatCallback) {
         if (enableWxPusher) {
             AccountEntity accountEntity = accountMapper.selectById(wechatCallback.getData().getExtra());
             if (accountEntity != null) {
@@ -163,6 +162,7 @@ public class UserController {
                 accountMapper.updateById(accountEntity);
             }
         }
+        return Result.success("success");
     }
 
     @UserLogin

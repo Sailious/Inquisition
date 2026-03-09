@@ -39,3 +39,4 @@ out/
 /src/main/resources/aegirtech.com.keystore
 application-dev.yml
 config/
+application-fixed.yml
