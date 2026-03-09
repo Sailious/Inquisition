@@ -39,8 +39,12 @@ dependencies {
     implementation 'com.zjiecode:wxpusher-java-sdk:2.1.4'
     implementation 'com.squareup.okhttp3:okhttp:4.10.0'
     implementation 'com.qcloud:cos_api:5.6.105'
-    implementation 'com.squareup.okhttp3:okhttp:4.10.0'
     implementation 'com.alibaba:fastjson:1.2.83'
     implementation 'org.mapstruct:mapstruct:1.5.3.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.3.Final'
+}
+// 配置打包时的资源处理
+bootJar {
+    // 排除内部的application.yml，这样外部的配置文件会被优先使用
+    exclude 'application.yml'
 }

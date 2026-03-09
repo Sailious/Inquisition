@@ -533,6 +533,8 @@ public class TaskServiceImpl implements TaskService {
             case SAND_FIRE:
                 dynamicInfo.addWorkUser(account.getId(), deviceToken, localDateTime.plusHours(24));
                 break;
+            case UNKNOWN:
+                break;
         }
     }
 

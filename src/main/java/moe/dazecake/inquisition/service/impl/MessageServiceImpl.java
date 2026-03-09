@@ -20,6 +20,9 @@ public class MessageServiceImpl implements MessageService {
     @Value("${wx-pusher.enable:false}")
     boolean enableWxPusher;
 
+    @Value("${qmsg.enable:false}")
+    boolean enableQmsg;
+
     @Value("${spring.mail.to:}")
     String adminMail;
 
@@ -28,6 +31,9 @@ public class MessageServiceImpl implements MessageService {
 
     @Resource
     WXPusherServiceImpl wxPusherService;
+
+    @Resource
+    QmsgServiceImpl qmsgService;
 
     @Resource
     AccountMapper accountMapper;
@@ -41,6 +47,15 @@ public class MessageServiceImpl implements MessageService {
                             content,
                     account.getNotice().getWxUID().getText(),
                     null);
+        }
+
+        //QQ推送
+        if (enableQmsg && account.getNotice().getQq().getEnable() && account.getNotice().getQq().getText() != null && !account.getNotice().getQq().getText().isEmpty()) {
+            try {
+                qmsgService.push(account.getNotice().getQq().getText(), "【" + title + "】\n\n" + content);
+            } catch (Exception e) {
+                log.warn("【审判庭】 QQ推送失败 " + account.getAccount() + ": " + account.getNotice().getQq().getText(), e);
+            }
         }
 
         //邮件推送

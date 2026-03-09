@@ -50,17 +50,22 @@ wx-pusher:
   enable: false
   app-token: AT_XXXXX
 
-# 存储配置 用于存储日志截图 需要自行配置删除规则 
+# qmsg配置 - QQ消息推送
+qmsg:
+  enable: false
+  key: "" # 您的Qmsg酱KEY，可以在https://qmsg.zendee.cn/获取，建议使用环境变量配置
+
+# 存储配置 用于存储日志截图 需要自行配置删除规则
 storage:
   oss:
-#腾讯云COS
+    #腾讯云COS
     enable: false
     secretId: xxxx
     secretKey: xxxx
     bucket: xxx-xxx
     region: xxx
   chfs:
-#CHFS——http://iscute.cn/chfs
+    #CHFS——http://iscute.cn/chfs
     enable: false
     url: http://chfsurl:port
     username: name
