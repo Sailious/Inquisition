@@ -40,7 +40,7 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public void push(AccountEntity account, String title, String content) {
-        //微信推送
+        // 微信推送
         if (enableWxPusher && account.getNotice().getWxUID().getEnable()) {
             wxPusherService.push(Message.CONTENT_TYPE_MD,
                     "# " + title + "\n\n" +
@@ -49,8 +49,9 @@ public class MessageServiceImpl implements MessageService {
                     null);
         }
 
-        //QQ推送
-        if (enableQmsg && account.getNotice().getQq().getEnable() && account.getNotice().getQq().getText() != null && !account.getNotice().getQq().getText().isEmpty()) {
+        // QQ推送
+        if (enableQmsg && account.getNotice().getQq().getEnable() && account.getNotice().getQq().getText() != null
+                && !account.getNotice().getQq().getText().isEmpty()) {
             try {
                 qmsgService.push(account.getNotice().getQq().getText(), "【" + title + "】\n\n" + content);
             } catch (Exception e) {
@@ -58,15 +59,17 @@ public class MessageServiceImpl implements MessageService {
             }
         }
 
-        //邮件推送
+        // 邮件推送
         if (enableMail && account.getNotice().getMail().getEnable()) {
             try {
                 emailService.sendSimpleMail(account.getNotice().getMail().getText(), title,
                         content);
             } catch (Exception e) {
-                //正则匹配是否为邮箱地址格式
-                if (!account.getNotice().getMail().getText().matches("^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$")) {
-                    log.info("【审判庭】 邮件推送失败 " + account.getAccount() + ": " + account.getNotice().getMail().getText() + " 不是一个有效的邮箱地址");
+                // 正则匹配是否为邮箱地址格式
+                if (!account.getNotice().getMail().getText()
+                        .matches("^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$")) {
+                    log.info("【审判庭】 邮件推送失败 " + account.getAccount() + ": " + account.getNotice().getMail().getText()
+                            + " 不是一个有效的邮箱地址");
                     account.getNotice().getMail().setEnable(false);
                     accountMapper.updateById(account);
                     return;

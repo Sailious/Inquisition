@@ -1,7 +1,6 @@
 package moe.dazecake.inquisition.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import moe.dazecake.inquisition.annotation.UserLogin;
 import moe.dazecake.inquisition.mapper.AccountMapper;
@@ -23,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 
-@Tag(name = "用户接口", description = "用户注册、登录、账号管理、微信推送等功能")
+@Tag(name = "用户接口")
 @ResponseBody
 @RestController
 public class UserController {
@@ -40,11 +39,9 @@ public class UserController {
     @Resource
     UserServiceImpl userService;
 
-    @Operation(summary = "使用CDK创建我的账号", description = "通过CDK激活码创建用户账号")
+    @Operation(summary = "使用CDK创建我的账号")
     @PostMapping("/createUserByCDK")
-    public synchronized Result<String> createUserByCDK(
-            @Parameter(description = "CDK创建用户信息", required = true)
-            @RequestBody CreateUserByCDKDTO createUserByCDKDTO) {
+    public synchronized Result<String> createUserByCDK(@RequestBody CreateUserByCDKDTO createUserByCDKDTO) {
         return userService.createUserByCDK(createUserByCDKDTO.getCdk(),
                 createUserByCDKDTO.getUsername(),
                 createUserByCDKDTO.getAccount(),
@@ -52,11 +49,9 @@ public class UserController {
                 createUserByCDKDTO.getServer());
     }
 
-    @Operation(summary = "使用在线支付创建我的账号", description = "通过在线支付创建用户账号")
+    @Operation(summary = "使用在线支付创建我的账号")
     @PostMapping("/createUserByPay")
-    public synchronized Result<String> createUserByPay(
-            @Parameter(description = "支付创建用户信息", required = true)
-            @RequestBody CreateUserByPayDTO createUserByPayDTO) {
+    public synchronized Result<String> createUserByPay(@RequestBody CreateUserByPayDTO createUserByPayDTO) {
         return userService.createUserByPay(createUserByPayDTO,
                 createUserByPayDTO.getUsername(),
                 createUserByPayDTO.getAccount(),
@@ -64,41 +59,31 @@ public class UserController {
                 createUserByPayDTO.getServer());
     }
 
-    @Operation(summary = "登陆我的账号", description = "用户登录系统，获取JWT Token")
+    @Operation(summary = "登陆我的账号")
     @PostMapping("/userLogin")
-    public Result<UserLoginVO> userLogin(
-            @Parameter(description = "用户登录信息", required = true)
-            @RequestBody UserLoginDTO userLoginDTO) {
+    public Result<UserLoginVO> userLogin(@RequestBody UserLoginDTO userLoginDTO) {
         return userService.userLogin(userLoginDTO.getAccount(), userLoginDTO.getPassword());
     }
 
     @UserLogin
-    @Operation(summary = "查询自己的账号", description = "获取当前登录用户的账号信息")
+    @Operation(summary = "查询自己的账号")
     @GetMapping("/showMyAccount")
-    public Result<AccountDTO> showMyAccount(
-            @Parameter(description = "Authorization Token", required = true)
-            @RequestHeader("Authorization") String token) {
+    public Result<AccountDTO> showMyAccount(@RequestHeader("Authorization") String token) {
         return userService.showMyAccount(JWTUtils.getId(token));
     }
 
     @UserLogin
-    @Operation(summary = "更新自己的账号", description = "更新当前登录用户的账号信息")
+    @Operation(summary = "更新自己的账号")
     @PostMapping("/updateMyAccount")
-    public Result<String> updateMyAccount(
-            @Parameter(description = "Authorization Token", required = true)
-            @RequestHeader("Authorization") String token,
-            @Parameter(description = "账号信息", required = true)
+    public Result<String> updateMyAccount(@RequestHeader("Authorization") String token,
             @RequestBody AccountDTO accountDTO) {
         return userService.updateMyAccount(JWTUtils.getId(token), accountDTO);
     }
 
     @UserLogin
-    @Operation(summary = "更新账号密码", description = "更新当前登录用户的游戏账号密码")
+    @Operation(summary = "更新账号密码")
     @PostMapping("/updateAccountAndPassword")
-    public Result<String> updateAccountAndPassword(
-            @Parameter(description = "Authorization Token", required = true)
-            @RequestHeader("Authorization") String token,
-            @Parameter(description = "更新账号密码信息", required = true)
+    public Result<String> updateAccountAndPassword(@RequestHeader("Authorization") String token,
             @RequestBody UpdateAccountAndPasswordDTO updateAccountAndPasswordDTO) {
         return userService.updateAccountAndPassword(JWTUtils.getId(token),
                 updateAccountAndPasswordDTO.getAccount(),
@@ -107,11 +92,9 @@ public class UserController {
     }
 
     @UserLogin
-    @Operation(summary = "冻结我的账号", description = "冻结当前登录用户的账号")
+    @Operation(summary = "冻结我的账号")
     @PostMapping("/freezeMyAccount")
-    public Result<String> freezeMyAccount(
-            @Parameter(description = "Authorization Token", required = true)
-            @RequestHeader("Authorization") String token) {
+    public Result<String> freezeMyAccount(@RequestHeader("Authorization") String token) {
         return userService.freezeMyAccount(JWTUtils.getId(token));
     }
 

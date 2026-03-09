@@ -58,7 +58,6 @@ public class TaskServiceImpl implements TaskService {
     @Value("${wx-pusher.enable:false}")
     boolean enableWxPusher;
 
-
     @Override
     public Result<AccountDTO> getTask(String deviceToken) {
 
@@ -66,7 +65,7 @@ public class TaskServiceImpl implements TaskService {
             return Result.failed("审判庭暂停任务授权中");
         }
 
-        //设备合法性检查
+        // 设备合法性检查
         var device = deviceMapper.selectOne(Wrappers.<DeviceEntity>lambdaQuery()
                 .eq(DeviceEntity::getDeviceToken, deviceToken));
         if (device == null) {
@@ -78,99 +77,101 @@ public class TaskServiceImpl implements TaskService {
             deviceMapper.updateById(device);
         }
 
-        //重复请求检查
+        // 重复请求检查
         for (Long worker : dynamicInfo.getWorkUserList()) {
             if (dynamicInfo.getWorkUserInfoMap().get(worker).getDeviceToken().equals(deviceToken)) {
-                return Result.repeatSuccess(AccountConvert.INSTANCE.toAccountDTO(accountMapper.selectById(worker)), "重复获取");
+                return Result.repeatSuccess(AccountConvert.INSTANCE.toAccountDTO(accountMapper.selectById(worker)),
+                        "重复获取");
             }
         }
 
-        //任务上锁
+        // 任务上锁
         synchronized (dynamicInfo.getWaitUserList()) {
             if (!dynamicInfo.getWaitUserList().isEmpty()) {
                 var account = new AccountEntity();
 
-            //检查任务是否达到下发标准
-            var iterator = dynamicInfo.getWaitUserList().iterator();
-            var hit = false;
-            while (iterator.hasNext()) {
-                account = accountMapper.selectById(iterator.next());
+                // 检查任务是否达到下发标准
+                var iterator = dynamicInfo.getWaitUserList().iterator();
+                var hit = false;
+                while (iterator.hasNext()) {
+                    account = accountMapper.selectById(iterator.next());
 
-                //删除检查
-                if (account.getDelete() == 1 || account.getExpireTime().isBefore(LocalDateTime.now())) {
-                    dynamicInfo.getUserSanInfoMap().remove(account.getId());
-                    dynamicInfo.getFreezeUserInfoMap().remove(account.getId());
-                    iterator.remove();
-                    continue;
-                }
-
-                //作用域检查
-                if (!device.getWorkScope().contains(account.getTaskType())) {
-                    continue;
-                } else {
-                    //B服日常任务不分配至特殊任务设备
-                    if (account.getServer() == 1 && account.getTaskType().equals("daily") && !device.getWorkScope().contains("b_daily")) {
+                    // 删除检查
+                    if (account.getDelete() == 1 || account.getExpireTime().isBefore(LocalDateTime.now())) {
+                        dynamicInfo.getUserSanInfoMap().remove(account.getId());
+                        dynamicInfo.getFreezeUserInfoMap().remove(account.getId());
+                        iterator.remove();
                         continue;
                     }
-                }
 
-                //时间检查，不在激活区间则跳转到下一个判断
-                if (!checkActivationTime(account)) {
-                    iterator.remove();
-                    continue;
-                }
-
-                //B服限制检查
-                if (account.getServer() == 1 && account.getBLimitDevice().size() != 0 && account.getTaskType().equals("daily")) {
-                    var usedDeviceToken = account.getBLimitDevice().get(0);
-                    if (!deviceToken.equals(usedDeviceToken)) {
-                        if (dynamicInfo.getDeviceStatusMap().containsKey(usedDeviceToken)) {
+                    // 作用域检查
+                    if (!device.getWorkScope().contains(account.getTaskType())) {
+                        continue;
+                    } else {
+                        // B服日常任务不分配至特殊任务设备
+                        if (account.getServer() == 1 && account.getTaskType().equals("daily")
+                                && !device.getWorkScope().contains("b_daily")) {
                             continue;
-                        } else {
-                            account.getBLimitDevice().clear();
-                            accountMapper.updateById(account);
                         }
+                    }
+
+                    // 时间检查，不在激活区间则跳转到下一个判断
+                    if (!checkActivationTime(account)) {
+                        iterator.remove();
+                        continue;
+                    }
+
+                    // B服限制检查
+                    if (account.getServer() == 1 && account.getBLimitDevice().size() != 0
+                            && account.getTaskType().equals("daily")) {
+                        var usedDeviceToken = account.getBLimitDevice().get(0);
+                        if (!deviceToken.equals(usedDeviceToken)) {
+                            if (dynamicInfo.getDeviceStatusMap().containsKey(usedDeviceToken)) {
+                                continue;
+                            } else {
+                                account.getBLimitDevice().clear();
+                                accountMapper.updateById(account);
+                            }
+                        }
+                    }
+
+                    // 重复分配任务检查
+                    AccountEntity finalAccount = account;
+                    if (dynamicInfo.getWorkUserList().stream()
+                            .anyMatch(worker -> worker.equals(finalAccount.getId()))) {
+                        iterator.remove();
+                        continue;
+                    }
+
+                    // 冻结判断，不处于冻结状态则返回任务
+                    if (!checkFreeze(account)) {
+                        hit = true;
+                        break;
                     }
                 }
 
-                //重复分配任务检查
-                AccountEntity finalAccount = account;
-                if (dynamicInfo.getWorkUserList().stream()
-                        .anyMatch(worker -> worker.equals(finalAccount.getId()))) {
-                    iterator.remove();
-                    continue;
+                // 检查是已经遍历完整个列表
+                if (!hit) {
+                    // 没有可用的任务
+                    return Result.success("没有可用的任务");
                 }
 
-                //冻结判断，不处于冻结状态则返回任务
-                if (!checkFreeze(account)) {
-                    hit = true;
-                    break;
-                }
-            }
+                // 任务上锁，同时分配强制超时期限
+                lockTask(deviceToken, account);
 
-            //检查是已经遍历完整个列表
-            if (!hit) {
-                //没有可用的任务
-                return Result.success("没有可用的任务");
-            }
+                // 记录日志
+                // log(deviceToken, account, "INFO", "任务开始", "任务开始", null);
 
-            //任务上锁，同时分配强制超时期限
-            lockTask(deviceToken, account);
+                // 推送消息
+                messageService.push(account, "任务开始", "请勿强行顶号，强行顶号将导致轮空");
 
-            //记录日志
-//            log(deviceToken, account, "INFO", "任务开始", "任务开始", null);
+                // 移出等待队列
+                iterator.remove();
 
-            //推送消息
-            messageService.push(account, "任务开始", "请勿强行顶号，强行顶号将导致轮空");
+                // 理智归零
+                dynamicInfo.setUserSanZero(account.getId());
 
-            //移出等待队列
-            iterator.remove();
-
-            //理智归零
-            dynamicInfo.setUserSanZero(account.getId());
-
-
-            return Result.success(AccountConvert.INSTANCE.toAccountDTO(account), "获取成功");
+                return Result.success(AccountConvert.INSTANCE.toAccountDTO(account), "获取成功");
 
             } else {
                 return Result.success("待分配队列为空");
@@ -190,44 +191,50 @@ public class TaskServiceImpl implements TaskService {
             return Result.success("任务不存在");
         }
 
-        //检查B服限制新增设备
+        // 检查B服限制新增设备
         if (account.getServer() == 1 && account.getBLimitDevice().size() == 0) {
             account.getBLimitDevice().add(deviceToken);
             accountMapper.updateById(account);
         }
 
-        //记录日志
-//        log(deviceToken, account, "INFO", "任务完成", "请查看上一条日志以查看状态", imageUrl);
+        // 记录日志
+        // log(deviceToken, account, "INFO", "任务完成", "请查看上一条日志以查看状态", imageUrl);
 
         var taskType = TaskType.getByStr(account.getTaskType());
-        //推送消息
-//        switch (TaskType.getByStr(account.getTaskType())) {
-//            case DAILY:
-//                messageService.push(account, "每日任务完成", "任务完成，可登陆面板查看作战结果\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
-//                break;
-//            case ROGUE:
-//            case ROGUE2:
-//                messageService.pushAdmin("肉鸽任务完成", "用户: " + account.getName() + " 肉鸽任务已完成\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
-//                messageService.push(account, "肉鸽任务完成", "肉鸽任务已完成，可登陆面板查看作战结果\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
-//                //恢复日常任务
-//                account.setTaskType("daily");
-//                accountMapper.updateById(account);
-//                break;
-//            case SAND_FIRE:
-//                messageService.pushAdmin("生息演算任务完成", "用户: " + account.getName() + " 生息演算任务已完成\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
-//                messageService.push(account, "生息演算任务完成", "生息演算任务已完成，可登陆面板查看作战结果\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
-//                //恢复日常任务
-//                account.setTaskType("daily");
-//                accountMapper.updateById(account);
-//                break;
-//        }
-        messageService.push(account, taskType.getName() + "任务完成", taskType.getName() + "任务完成，可登陆面板查看作战结果\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
+        // 推送消息
+        // switch (TaskType.getByStr(account.getTaskType())) {
+        // case DAILY:
+        // messageService.push(account, "每日任务完成", "任务完成，可登陆面板查看作战结果\n" + "<img src=\"" +
+        // imageUrl + "\" alt=\"screenshots\">");
+        // break;
+        // case ROGUE:
+        // case ROGUE2:
+        // messageService.pushAdmin("肉鸽任务完成", "用户: " + account.getName() + " 肉鸽任务已完成\n"
+        // + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
+        // messageService.push(account, "肉鸽任务完成", "肉鸽任务已完成，可登陆面板查看作战结果\n" + "<img
+        // src=\"" + imageUrl + "\" alt=\"screenshots\">");
+        // //恢复日常任务
+        // account.setTaskType("daily");
+        // accountMapper.updateById(account);
+        // break;
+        // case SAND_FIRE:
+        // messageService.pushAdmin("生息演算任务完成", "用户: " + account.getName() + "
+        // 生息演算任务已完成\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
+        // messageService.push(account, "生息演算任务完成", "生息演算任务已完成，可登陆面板查看作战结果\n" + "<img
+        // src=\"" + imageUrl + "\" alt=\"screenshots\">");
+        // //恢复日常任务
+        // account.setTaskType("daily");
+        // accountMapper.updateById(account);
+        // break;
+        // }
+        messageService.push(account, taskType.getName() + "任务完成",
+                taskType.getName() + "任务完成，可登陆面板查看作战结果\n" + "<img src=\"" + imageUrl + "\" alt=\"screenshots\">");
         if (taskType != TaskType.DAILY) {
             account.setTaskType(TaskType.DAILY.getType());
             accountMapper.updateById(account);
         }
 
-        //移除队列
+        // 移除队列
         dynamicInfo.removeWorkUser(account.getId());
 
         return Result.success("success");
@@ -245,16 +252,17 @@ public class TaskServiceImpl implements TaskService {
             return Result.success("任务不存在");
         }
 
-        //记录日志
-//        log(deviceToken, account, "WARN", "任务失败", "任务失败,请查看上一条日志检查原因: " + type, imageUrl);
+        // 记录日志
+        // log(deviceToken, account, "WARN", "任务失败", "任务失败,请查看上一条日志检查原因: " + type,
+        // imageUrl);
 
-        //移除队列
+        // 移除队列
         dynamicInfo.removeWorkUser(account.getId());
 
-        //异常处理
+        // 异常处理
         errorHandle(account, deviceToken, type);
 
-        //推送消息
+        // 推送消息
         messageService.push(account, "任务失败", "任务失败，请登陆面板查看失败原因");
 
         return Result.success("success");
@@ -304,12 +312,11 @@ public class TaskServiceImpl implements TaskService {
                                     .eq(AccountEntity::getDelete, 0)
                                     .eq(AccountEntity::getFreeze, 0)
                                     .eq(AccountEntity::getTaskType, "daily")
-                                    .ge(AccountEntity::getExpireTime, LocalDateTime.now())
-                    ).stream().map(AccountEntity::getId).distinct().collect(Collectors.toList())
-            );
+                                    .ge(AccountEntity::getExpireTime, LocalDateTime.now()))
+                            .stream().map(AccountEntity::getId).distinct().collect(Collectors.toList()));
         }
 
-        //记录日志
+        // 记录日志
         logService.logInfo("任务列表刷新", "管理员强制刷新了任务队列");
 
         return new Result<String>().setCode(200)
@@ -331,13 +338,13 @@ public class TaskServiceImpl implements TaskService {
         dynamicInfo.getWorkUserList().clear();
         dynamicInfo.getAllWorkUserInfo().clear();
 
-        //记录日志
+        // 记录日志
         logService.logInfo("强制解锁", "管理员强制解锁释放整个上锁队列");
 
         return Result.success("强制解锁成功");
     }
 
-    //检查是否处于时间激活区间，如果是，则返回true，否则返回false
+    // 检查是否处于时间激活区间，如果是，则返回true，否则返回false
     @Override
     public boolean checkActivationTime(AccountEntity account) {
         int dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1;
@@ -349,13 +356,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getMonday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getMonday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getMonday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -371,13 +378,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getTuesday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getTuesday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getTuesday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -393,13 +400,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getWednesday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getWednesday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getWednesday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -415,13 +422,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getThursday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getThursday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getThursday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -437,13 +444,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getFriday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getFriday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getFriday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -459,13 +466,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getSaturday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getSaturday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getSaturday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -481,13 +488,13 @@ public class TaskServiceImpl implements TaskService {
                     if (account.getActive().getSunday().getDetail().isEmpty()) {
                         break;
                     } else {
-                        //遍历非激活时间区间
+                        // 遍历非激活时间区间
                         for (int i1 = 0; i1 < account.getActive().getSunday().getDetail().size(); i1++) {
                             String[] time = account.getActive().getSunday().getDetail().get(i1).split("-");
 
-                            //处于非激活时间内
+                            // 处于非激活时间内
                             if (TimeUtil.isInTime(time[0], time[1])) {
-                                //不通过
+                                // 不通过
                                 return false;
                             }
                         }
@@ -504,17 +511,17 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public boolean checkFreeze(AccountEntity account) {
         if (dynamicInfo.getFreezeUserInfoMap().containsKey(account.getId())) {
-            //检测是否结束冻结
+            // 检测是否结束冻结
             if (dynamicInfo.getFreezeUserInfoMap().get(account.getId()).isBefore(LocalDateTime.now())) {
                 dynamicInfo.getFreezeUserInfoMap().remove(account.getId());
-                //解冻，不在冻结状态
+                // 解冻，不在冻结状态
                 return false;
             }
-            //仍处于冻结
+            // 仍处于冻结
             return true;
 
         } else {
-            //不在冻结状态
+            // 不在冻结状态
             return false;
         }
     }
@@ -540,13 +547,13 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void log(String deviceToken, AccountEntity account, String level, String title,
-                    String content, String imgUrl) {
+            String content, String imgUrl) {
         var addLogDTO = new AddLogDTO();
         TaskType type = TaskType.getByStr(account.getTaskType());
 
-        String detail =
-                "[" + type.getName() + "] [" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")) + "] " + type +
-                        content;
+        String detail = "[" + type.getName() + "] [" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                + "] " + type +
+                content;
 
         addLogDTO.setLevel(level)
                 .setTaskType(account.getTaskType())
@@ -620,63 +627,63 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void calculatingSan() {
-        //获取迭代器
+        // 获取迭代器
         Iterator<Map.Entry<Long, UserSan>> entryIterator = dynamicInfo.getUserSanInfoMap().entrySet().iterator();
 
-        //遍历所有用户
+        // 遍历所有用户
         while (entryIterator.hasNext()) {
             Long id = entryIterator.next().getKey();
 
             var account = accountMapper.selectById(id);
 
-            //无效账号判空
+            // 无效账号判空
             if (account == null) {
                 entryIterator.remove();
                 continue;
             }
 
-            //检查是否已删除
+            // 检查是否已删除
             if (account.getDelete() == 1) {
                 entryIterator.remove();
                 continue;
             }
 
-            //检查是否已冻结
+            // 检查是否已冻结
             if (account.getFreeze() == 1) {
                 entryIterator.remove();
                 continue;
             }
 
-            //检查是否已到期
+            // 检查是否已到期
             if (account.getExpireTime().isBefore(LocalDateTime.now())) {
                 entryIterator.remove();
                 messageService.push(account, "到期提醒", "您的账号已到期，作战已暂停，若仍需托管请及时续费");
                 continue;
             }
 
-            //递增用户理智
+            // 递增用户理智
             dynamicInfo.addUserSan(id, 1);
 
             var san = dynamicInfo.getUserSanInfoMap().get(id).getSan();
             var maxSan = dynamicInfo.getUserSanInfoMap().get(id).getMaxSan();
 
-            //检查是否到达阈值 阈值为最大值-40
+            // 检查是否到达阈值 阈值为最大值-40
             if (san >= maxSan - 40) {
 
-                //检查待分配队列中是否有重复任务
+                // 检查待分配队列中是否有重复任务
                 dynamicInfo.getWaitUserList().removeIf(waiter -> waiter.equals(account.getId()));
 
-                //加入待分配队列
+                // 加入待分配队列
                 dynamicInfo.getWaitUserList().add(account.getId());
 
                 messageService.push(account, "等待分配作战服务器", "您的理智已达到 " + san +
                         "，等待分配作战服务器中，分配完成后将会自动开始作战");
 
-                //归零理智
+                // 归零理智
                 dynamicInfo.setUserSanZero(id);
             }
 
-            //检查是否到达提醒阈值 阈值为最大值-45
+            // 检查是否到达提醒阈值 阈值为最大值-45
             if (san == maxSan - 45) {
                 messageService.push(account, "作战预告", "您的账号最快将在30" +
                         "分钟后开始作战，若您当前仍在线，请注意合理把握时间，避免被强制下线\n\n" +

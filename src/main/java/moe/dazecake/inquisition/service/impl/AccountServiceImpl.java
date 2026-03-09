@@ -57,7 +57,7 @@ public class AccountServiceImpl implements AccountService {
             if (accountJson.containsKey("username" + i) && accountJson.containsKey("password" + i)) {
                 var account = new AccountEntity();
 
-                //导入账号密码
+                // 导入账号密码
                 if (accountJson.get("username" + i).contains("#")) {
                     var parts = accountJson.get("username" + i).split("#");
                     account.setName(parts[1]);
@@ -138,7 +138,7 @@ public class AccountServiceImpl implements AccountService {
         if (account == null) {
             return "账号不存在";
         }
-        //检查先决条件
+        // 检查先决条件
         if (!isAdmin) {
             if (account.getDelete() == 1 || account.getExpireTime().isBefore(LocalDateTime.now())) {
                 return "账号已到期或失效";
@@ -149,7 +149,7 @@ public class AccountServiceImpl implements AccountService {
         } else {
             account.setFreeze(0);
         }
-        //插队检查
+        // 插队检查
         synchronized (dynamicInfo.getWaitUserList()) {
             if (dynamicInfo.getWaitUserList().contains(id)) {
                 dynamicInfo.getWaitUserList().remove(id);
@@ -157,19 +157,19 @@ public class AccountServiceImpl implements AccountService {
                 return "插队成功";
             }
         }
-        //上锁检查
+        // 上锁检查
         for (Long worker : dynamicInfo.getWorkUserList()) {
             if (worker.equals(id)) {
                 return "已经在作战中";
             }
         }
-        //资格检查
+        // 资格检查
         if (!isAdmin) {
             if (account.getRefresh() < 1) {
                 return "今日刷新次数已达上限，每天零点刷新，明天再来看看吧";
             }
         }
-        //执行
+        // 执行
         synchronized (dynamicInfo.getWaitUserList()) {
             if (!dynamicInfo.getWaitUserList().contains(account.getId())) {
                 dynamicInfo.getWaitUserList().add(0, account.getId());
@@ -191,10 +191,10 @@ public class AccountServiceImpl implements AccountService {
 
         }
 
-        //停止作战
+        // 停止作战
         taskService.forceHaltTask(id);
 
-        //重置动态数据
+        // 重置动态数据
         dynamicInfo.setUserSan(id, 135, 135);
 
         return "重置成功";
@@ -257,14 +257,13 @@ public class AccountServiceImpl implements AccountService {
             if (dynamicInfo.getUserSanInfoMap().containsKey(user.getId())) {
                 result.getRecords().add(AccountConvert.INSTANCE.toAccountWithSanVO(
                         user,
-                        dynamicInfo.getUserSanInfoMap().get(user.getId()).getSan() + "/" + dynamicInfo.getUserSanInfoMap().get(user.getId()).getMaxSan())
-                );
+                        dynamicInfo.getUserSanInfoMap().get(user.getId()).getSan() + "/"
+                                + dynamicInfo.getUserSanInfoMap().get(user.getId()).getMaxSan()));
             } else {
                 result.getRecords().add(AccountConvert.INSTANCE.toAccountWithSanVO(user, ""));
             }
         }
         return result;
     }
-
 
 }
