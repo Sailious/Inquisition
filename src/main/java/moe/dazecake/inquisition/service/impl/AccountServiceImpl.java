@@ -246,6 +246,18 @@ public class AccountServiceImpl implements AccountService {
         }
     }
 
+    @Override
+    public void clearExpiredTime(Long id) {
+        var account = accountMapper.selectById(id);
+        if (account != null) {
+            if (account.getExpireTime().isBefore(LocalDateTime.now())) {
+                account.setExpireTime(LocalDateTime.now());
+                account.setUpdateTime(LocalDateTime.now());
+                accountMapper.updateById(account);
+            }
+        }
+    }
+
     @NotNull
     public PageQueryVO<AccountWithSanVO> getAccountWithSanVOPageQueryVO(Page<AccountEntity> data) {
         var result = new PageQueryVO<AccountWithSanVO>();

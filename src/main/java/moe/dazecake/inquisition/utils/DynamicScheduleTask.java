@@ -3,8 +3,10 @@ package moe.dazecake.inquisition.utils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.extern.slf4j.Slf4j;
 import moe.dazecake.inquisition.mapper.AccountMapper;
+import moe.dazecake.inquisition.mapper.BillMapper;
 import moe.dazecake.inquisition.mapper.DeviceMapper;
 import moe.dazecake.inquisition.model.entity.AccountEntity;
+import moe.dazecake.inquisition.model.entity.BillEntity;
 import moe.dazecake.inquisition.model.entity.DeviceEntity;
 import moe.dazecake.inquisition.service.impl.ChinacServiceImpl;
 import moe.dazecake.inquisition.service.impl.LogServiceImpl;
@@ -52,6 +54,12 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
     @Resource
     ChinacServiceImpl chinacService;
 
+    @Resource
+    BillMapper billMapper;
+
+    @Resource
+    com.lakala.moss.service.IMossApiService mossApiService;
+
     @Value("${spring.mail.to:}")
     String to;
 
@@ -69,25 +77,23 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
-        //队列巡检
+        // 队列巡检
         taskRegistrar.addTriggerTask(
                 () -> {
-                    //log.info("正在巡检队列: " + LocalDateTime.now().toLocalTime());
-                    //检查等待队列中是否存在重复项，若存在删除多余的重复项
+                    // log.info("正在巡检队列: " + LocalDateTime.now().toLocalTime());
+                    // 检查等待队列中是否存在重复项，若存在删除多余的重复项
                     LinkedHashSet<Long> set = new LinkedHashSet<>(dynamicInfo.getWaitUserList());
                     dynamicInfo.setWaitUserList(new ArrayList<>(set));
                 },
-                triggerContext -> new CronTrigger("0 */1 * * * *").nextExecutionTime(triggerContext)
-        );
-        //理智刷新
+                triggerContext -> new CronTrigger("0 */1 * * * *").nextExecutionTime(triggerContext));
+        // 理智刷新
         taskRegistrar.addTriggerTask(
                 () -> {
-                    //log.info("正在刷新用户理智: " + LocalDateTime.now().toLocalTime());
+                    // log.info("正在刷新用户理智: " + LocalDateTime.now().toLocalTime());
                     taskService.calculatingSan();
                 },
-                triggerContext -> new CronTrigger("0 */6 * * * *").nextExecutionTime(triggerContext)
-        );
-        //设备离线监控
+                triggerContext -> new CronTrigger("0 */6 * * * *").nextExecutionTime(triggerContext));
+        // 设备离线监控
         taskRegistrar.addTriggerTask(
                 () -> {
                     for (java.util.Map.Entry<String, Integer> count : dynamicInfo.getDeviceCounterMap().entrySet()) {
@@ -100,53 +106,50 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
 
                         if (num == 0) {
                             dynamicInfo.getDeviceStatusMap().put(token, 0);
-//                            log.warn("设备离线: " + token);
+                            // log.warn("设备离线: " + token);
                         } else if (num == -60) {
-                            //重连超时提示
+                            // 重连超时提示
                             var device = deviceMapper.selectOne(
                                     Wrappers.<DeviceEntity>lambdaQuery()
-                                            .eq(DeviceEntity::getDeviceToken, token)
-                            );
+                                            .eq(DeviceEntity::getDeviceToken, token));
 
-                            //记录日志
+                            // 记录日志
                             logService.logWarn("设备离线", "设备名称: " + device.getDeviceName() + "\n" +
                                     "设备token: " + device.getDeviceToken() + "\n");
 
-                            //邮件通知
+                            // 邮件通知
                             messageService.pushAdmin("[审判庭] 设备离线", "设备名称: " + device.getDeviceName() + "\n"
                                     + "设备token: " + device.getDeviceToken() + "\n"
                                     + "时间: " + LocalDateTime.now() + "\n");
 
                         } else if (num == 86400) {
-                            //超时24h，移除设备
+                            // 超时24h，移除设备
                             dynamicInfo.getDeviceStatusMap().remove(token);
                             dynamicInfo.getDeviceCounterMap().remove(token);
 
                             var device = deviceMapper.selectOne(
                                     Wrappers.<DeviceEntity>lambdaQuery()
-                                            .eq(DeviceEntity::getDeviceToken, token)
-                            );
+                                            .eq(DeviceEntity::getDeviceToken, token));
                             device.setDelete(1);
                             deviceMapper.updateById(device);
 
-                            //记录日志
+                            // 记录日志
                             logService.logWarn("设备移除", "设备名称: " + device.getDeviceName() + "\n" +
                                     "设备token: " + device.getDeviceToken() + "\n");
 
-                            //邮件通知
+                            // 邮件通知
                             messageService.pushAdmin("[审判庭] 设备移除", "设备名称: " + device.getDeviceName() + "\n"
                                     + "设备token: " + device.getDeviceToken() + "\n"
                                     + "时间: " + LocalDateTime.now() + "\n");
                         }
                     }
                 },
-                triggerContext -> new CronTrigger("0/5 * * * * ?").nextExecutionTime(triggerContext)
-        );
-        //任务超时检测
+                triggerContext -> new CronTrigger("0/5 * * * * ?").nextExecutionTime(triggerContext));
+        // 任务超时检测
         taskRegistrar.addTriggerTask(
                 () -> {
                     if (dynamicInfo.getActive()) {
-                        //log.info("任务超时检测");
+                        // log.info("任务超时检测");
                         LocalDateTime nowTime = LocalDateTime.now();
                         int num = 0;
                         synchronized (dynamicInfo.getWorkUserList()) {
@@ -155,7 +158,7 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                                     continue;
                                 }
                                 if (dynamicInfo.getWorkUserExpireTime(worker).isBefore(nowTime)) {
-                                    //记录日志
+                                    // 记录日志
                                     logService.logWarn("任务超时", "");
                                     taskService.forceHaltTask(worker);
                                     num++;
@@ -167,9 +170,8 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                         }
                     }
                 },
-                triggerContext -> new CronTrigger("0 0/5 * * * ?").nextExecutionTime(triggerContext)
-        );
-        //账号过期检测
+                triggerContext -> new CronTrigger("0 0/5 * * * ?").nextExecutionTime(triggerContext));
+        // 账号过期检测
         taskRegistrar.addTriggerTask(
                 () -> {
                     log.info("【审判庭】 账号过期检测");
@@ -185,12 +187,10 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                                         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + "过期，记得及时续费哦。";
 
                                 messageService.push(account, "【明日方舟】托管续费提醒", msg);
-                            }
-                    );
+                            });
                 },
-                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext)
-        );
-        //账号冻结检测
+                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext));
+        // 账号冻结检测
         taskRegistrar.addTriggerTask(
                 () -> {
                     log.info("【审判庭】 账号冻结检测");
@@ -205,30 +205,25 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
 
                                 messageService.push(account, "【明日方舟】账号冻结提醒", msg);
 
-                            }
-                    );
+                            });
                 },
-                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext)
-        );
-        //每日刷新次数更新
+                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext));
+        // 每日刷新次数更新
         taskRegistrar.addTriggerTask(
                 () -> {
                     log.info("【审判庭】 每日刷新次数更新");
                     var accountList = accountMapper.selectList(Wrappers.<AccountEntity>lambdaQuery()
                             .le(AccountEntity::getRefresh, 0)
                             .eq(AccountEntity::getDelete, 0)
-                            .ge(AccountEntity::getExpireTime, LocalDateTime.now())
-                    );
+                            .ge(AccountEntity::getExpireTime, LocalDateTime.now()));
                     accountList.forEach(
                             (account) -> {
                                 account.setRefresh(1);
                                 accountMapper.updateById(account);
-                            }
-                    );
+                            });
                 },
-                triggerContext -> new CronTrigger("0 0 0 * * ?").nextExecutionTime(triggerContext)
-        );
-        //动态设备管理
+                triggerContext -> new CronTrigger("0 0 0 * * ?").nextExecutionTime(triggerContext));
+        // 动态设备管理
         taskRegistrar.addTriggerTask(
                 () -> {
                     if (!enableAutoDeviceManage) {
@@ -258,8 +253,7 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                                 .setDeviceName("审判庭_" + time)
                                 .setRegion("")
                                 .setDeviceToken(newDevice.get(0))
-                                .setDelete(0)
-                        );
+                                .setDelete(0));
                         String text = "激活用户数量: " + payedUserList.size() + "\n" +
                                 "设备数量: " + deviceList.size() + "\n" +
                                 "已为您自动增添新设备，请留意扣费信息";
@@ -267,9 +261,9 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                     }
                     log.info("【审判庭】 设备自动续费");
 
-                    //检测多余设备跳过续费 最多允许冗余设备数量: 2
+                    // 检测多余设备跳过续费 最多允许冗余设备数量: 2
                     var overNum = (payedUserList.size() - deviceList.size() * maxPlayerInDevice) / maxPlayerInDevice;
-                    //过滤手动添加设备
+                    // 过滤手动添加设备
                     deviceList.removeIf(device -> device.getChinac() != 1);
                     if (overNum > 2) {
                         for (int i = 0; i < overNum; i++) {
@@ -285,7 +279,8 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                         }
                     }
                     for (DeviceEntity device : deviceList) {
-                        if (device.getExpireTime().isBefore(LocalDateTime.now().plusDays(7)) && device.getChinac() == 1) {
+                        if (device.getExpireTime().isBefore(LocalDateTime.now().plusDays(7))
+                                && device.getChinac() == 1) {
                             if (chinacService.renewDevice(device.getRegion(), device.getDeviceToken(), 1)) {
                                 String text = "续费设备: " + device.getDeviceName() + "\n" +
                                         "已为您自动续费，请留意扣费信息";
@@ -298,28 +293,60 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                         }
                     }
                 },
-                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext)
-        );
-        //异常账号检测
+                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext));
+        // 异常账号检测
         taskRegistrar.addTriggerTask(
                 () -> {
                     log.info("【异常账号检测】 检测开始");
                     var accountList = accountMapper.selectList(Wrappers.<AccountEntity>lambdaQuery()
                             .eq(AccountEntity::getFreeze, 0)
                             .eq(AccountEntity::getDelete, 0)
-                            .ge(AccountEntity::getExpireTime, LocalDateTime.now())
-                    );
+                            .ge(AccountEntity::getExpireTime, LocalDateTime.now()));
                     accountList.forEach(
                             (account) -> {
                                 if (!dynamicInfo.getUserSanInfoMap().containsKey(account.getId())) {
                                     log.info("【异常账号检测】 异常账号: " + account.getAccount() + " " + account.getAccount());
                                     dynamicInfo.setUserSan(account.getId(), 135, 135);
                                 }
-                            }
-                    );
+                            });
                     log.info("【异常账号检测】 已完成所有异常账号自动检修");
                 },
-                triggerContext -> new CronTrigger("0 0 4 * * ?").nextExecutionTime(triggerContext)
-        );
+                triggerContext -> new CronTrigger("0 0 4 * * ?").nextExecutionTime(triggerContext));
+        // 未支付订单自动关单
+        taskRegistrar.addTriggerTask(
+                () -> {
+                    log.info("【支付订单】 未支付订单自动关单检测");
+                    var expireTime = LocalDateTime.now().minusMinutes(35);
+                    var unpaidBills = billMapper.selectList(Wrappers.<BillEntity>lambdaQuery()
+                            .eq(BillEntity::getState, 0)
+                            .lt(BillEntity::getUpdateTime, expireTime));
+                    if (unpaidBills.isEmpty()) {
+                        log.info("【支付订单】 无需关单的未支付订单");
+                        return;
+                    }
+                    log.info("【支付订单】 检测到 {} 个未支付订单，开始关单", unpaidBills.size());
+                    unpaidBills.forEach(bill -> {
+                        try {
+                            var closeReq = new com.lakala.moss.api.request.OrderClsReq();
+                            closeReq.setOrigin_order_no(bill.getOrderNo());
+                            var locationInfo = new com.lakala.moss.api.params.LocationInfo();
+                            locationInfo.setRequest_ip("0.0.0.0");
+                            closeReq.setLocation_info(locationInfo);
+                            var res = mossApiService.OrderCls(closeReq);
+                            if (res.getHead() != null && "000000".equals(res.getHead().getCode())) {
+                                bill.setState(2);
+                                bill.setUpdateTime(LocalDateTime.now());
+                                billMapper.updateById(bill);
+                                log.info("【支付订单】 关单成功, orderNo: {}", bill.getOrderNo());
+                            } else {
+                                log.warn("【支付订单】 关单失败, orderNo: {}, desc: {}",
+                                        bill.getOrderNo(), res.getHead() != null ? res.getHead().getDesc() : "未知错误");
+                            }
+                        } catch (Exception e) {
+                            log.error("【支付订单】 关单异常, orderNo: {}", bill.getOrderNo(), e);
+                        }
+                    });
+                },
+                triggerContext -> new CronTrigger("0 0/10 * * * ?").nextExecutionTime(triggerContext));
     }
 }

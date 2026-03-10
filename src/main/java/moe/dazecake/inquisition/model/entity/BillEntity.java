@@ -73,6 +73,10 @@ public class BillEntity {
     @Schema(description = "付款状态")
     Integer state;
 
+    @Column(name = "refund_reason", comment = "退款原因")
+    @Schema(description = "退款原因")
+    String refundReason;
+
     @Column(name = "update_time", comment = "更新时间")
     @Schema(description = "更新时间")
     LocalDateTime updateTime;
