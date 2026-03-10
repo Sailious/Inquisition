@@ -20,7 +20,6 @@ import com.lakala.moss.api.response.OrderRefundRes;
 import com.lakala.moss.api.response.OrderChkApplyRes;
 import com.lakala.moss.api.response.OrderQryListRes;
 import com.lakala.moss.service.IMossApiService;
-import com.lakala.moss.service.impl.MossApiServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import moe.dazecake.inquisition.constant.enums.TaskType;
 import moe.dazecake.inquisition.mapper.AccountMapper;
@@ -75,7 +74,8 @@ public class PayServiceImpl implements PayService {
     @Resource
     AccountServiceImpl accountService;
 
-    IMossApiService mossApiService = new MossApiServiceImpl();
+    @Resource
+    IMossApiService mossApiService;
 
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
 

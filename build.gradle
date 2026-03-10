@@ -46,9 +46,6 @@ dependencies {
 }
 // 配置打包时的资源处理
 bootJar {
-    archiveFileName = 'Inquisition.jar'
-}
-
-springBoot {
-    mainClass = 'moe.dazecake.inquisition.InquisitionApplication'
+    // 排除内部的application.yml，这样外部的配置文件会被优先使用
+    exclude 'application.yml'
 }
