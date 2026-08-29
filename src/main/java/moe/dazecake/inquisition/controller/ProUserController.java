@@ -70,7 +70,7 @@ public class ProUserController {
     @Operation(summary = "修改高级用户密码")
     @PostMapping("/updateProUserPassword")
     public Result<String> updateProUserPassword(@RequestHeader("Authorization") String token,
-                                                @RequestBody UpdateProUserPasswordDTO updateProUserPasswordDTO) {
+            @RequestBody UpdateProUserPasswordDTO updateProUserPasswordDTO) {
         return proUserService.updateProUserPassword(JWTUtils.getId(token), updateProUserPasswordDTO);
     }
 
@@ -85,9 +85,9 @@ public class ProUserController {
     @Operation(summary = "分页显示代理商的附属用户")
     @GetMapping("/getSubUserList")
     public Result<PageQueryVO<AccountWithSanVO>> getSubUserList(@RequestHeader("Authorization") String token,
-                                                                @RequestParam String type,
-                                                                @RequestParam Integer current,
-                                                                @RequestParam Integer size) {
+            @RequestParam String type,
+            @RequestParam Integer current,
+            @RequestParam Integer size) {
         return proUserService.queryAllSubUser(JWTUtils.getId(token), type, current, size);
     }
 
@@ -95,9 +95,9 @@ public class ProUserController {
     @Operation(summary = "通过账号搜索附属用户")
     @GetMapping("/searchSubUserByAccount")
     public Result<PageQueryVO<AccountWithSanVO>> searchSubUser(@RequestHeader("Authorization") String token,
-                                                               @RequestParam Integer page,
-                                                               @RequestParam Integer size,
-                                                               @RequestParam String keyword) {
+            @RequestParam Integer page,
+            @RequestParam Integer size,
+            @RequestParam String keyword) {
         return proUserService.querySubUserByAccount(JWTUtils.getId(token), page, size, keyword);
     }
 
@@ -105,7 +105,7 @@ public class ProUserController {
     @Operation(summary = "代理商配置附属用户设置")
     @PostMapping("/setSubUser")
     public Result<String> setSubUser(@RequestHeader("Authorization") String token,
-                                     @RequestBody AccountDTO accountDTO) {
+            @RequestBody AccountDTO accountDTO) {
         proUserService.updateSubAccount(JWTUtils.getId(token), accountDTO);
         return Result.success("修改成功");
     }
@@ -114,9 +114,9 @@ public class ProUserController {
     @Operation(summary = "显示代理商附属用户日志")
     @GetMapping("/getSubUserLog")
     public Result<PageQueryVO<LogDTO>> getSubUserLog(@RequestHeader("Authorization") String token,
-                                                     @RequestParam Long userId,
-                                                     @RequestParam Integer page,
-                                                     @RequestParam Integer size) {
+            @RequestParam Long userId,
+            @RequestParam Integer page,
+            @RequestParam Integer size) {
         return proUserService.querySubUserLogByAccount(JWTUtils.getId(token), userId, page, size);
     }
 
@@ -124,7 +124,7 @@ public class ProUserController {
     @Operation(summary = "强制附属用户立即作战")
     @PostMapping("/forceSubUserFight")
     public Result<String> forceSubUserFight(@RequestHeader("Authorization") String token,
-                                            @RequestBody AccountIDDTO accountIDDTO) {
+            @RequestBody AccountIDDTO accountIDDTO) {
         return proUserService.forceFightSubUser(JWTUtils.getId(token), accountIDDTO.getId());
     }
 
@@ -132,7 +132,7 @@ public class ProUserController {
     @Operation(summary = "强制附属用户立即停止作战")
     @PostMapping("/forceSubUserStop")
     public Result<String> forceSubUserStop(@RequestHeader("Authorization") String token,
-                                           @RequestBody AccountIDDTO accountIDDTO) {
+            @RequestBody AccountIDDTO accountIDDTO) {
         return proUserService.forceStopSubUser(JWTUtils.getId(token), accountIDDTO.getId());
     }
 
@@ -154,7 +154,7 @@ public class ProUserController {
     @Operation(summary = "pro_user扣除余额创建cdk")
     @PostMapping("/createCdkByProUser")
     public Result<String> createCdkByProUser(@RequestHeader("Authorization") String token,
-                                             @RequestBody CreateCDKDTO createCDKDTO) {
+            @RequestBody CreateCDKDTO createCDKDTO) {
         return proUserService.createCdkByProUser(JWTUtils.getId(token), createCDKDTO);
     }
 
@@ -162,38 +162,39 @@ public class ProUserController {
     @Operation(summary = "pro_user扣除余额创建用户")
     @PostMapping("/createSubUserByProUser")
     public Result<String> createSubUserByProUser(@RequestHeader("Authorization") String token,
-                                                 @RequestBody CreateUserByProUserDTO createUserByProUserDTO) {
+            @RequestBody CreateUserByProUserDTO createUserByProUserDTO) {
         return proUserService.createSubUserByProUser(
                 JWTUtils.getId(token),
                 createUserByProUserDTO.getName(),
                 createUserByProUserDTO.getAccount(),
                 createUserByProUserDTO.getPassword(),
                 createUserByProUserDTO.getServer(),
-                createUserByProUserDTO.getDays()
-        );
+                createUserByProUserDTO.getDays());
     }
 
     @ProUserLogin
     @Operation(summary = "pro_user手动续期附属用户daily时长")
     @PostMapping("/renewSubUserDaily")
     public Result<String> renewSubUserDaily(@RequestHeader("Authorization") String token,
-                                            @RequestBody ProUserRenewalSubUserDTO proUserRenewalSubUserDTO) {
-        return proUserService.renewSubUserDaily(JWTUtils.getId(token), proUserRenewalSubUserDTO.getId(), proUserRenewalSubUserDTO.getMo());
+            @RequestBody ProUserRenewalSubUserDTO proUserRenewalSubUserDTO) {
+        return proUserService.renewSubUserDaily(JWTUtils.getId(token), proUserRenewalSubUserDTO.getId(),
+                proUserRenewalSubUserDTO.getMo());
     }
 
     @ProUserLogin
     @Operation(summary = "pro_user代购商品")
     @PostMapping("/buyGoodsForSubUser")
     public Result<String> buyGoodsForSubUser(@RequestHeader("Authorization") String token,
-                                             @RequestBody BuyGoodsForSubUserDTO buyGoodsForSubUserDTO) {
-        return proUserService.buyGoodsForSubUser(JWTUtils.getId(token), buyGoodsForSubUserDTO.getSubUserId(), buyGoodsForSubUserDTO.getGoodsId());
+            @RequestBody BuyGoodsForSubUserDTO buyGoodsForSubUserDTO) {
+        return proUserService.buyGoodsForSubUser(JWTUtils.getId(token), buyGoodsForSubUserDTO.getSubUserId(),
+                buyGoodsForSubUserDTO.getGoodsId());
     }
 
     @ProUserLogin
     @Operation(summary = "删除并回收用户")
     @PostMapping("/deleteAndRecycleUser")
     public Result<String> deleteAndRecycleUser(@RequestHeader("Authorization") String token,
-                                               @RequestBody AccountIDDTO accountIDDTO) {
+            @RequestBody AccountIDDTO accountIDDTO) {
         return proUserService.deleteAndRecycleUser(JWTUtils.getId(token), accountIDDTO.getId());
     }
 }

@@ -121,7 +121,5 @@ public interface AccountService {
      * @date 2023/5/3 18:41
      */
     void addAccountExpireTime(Long id, Integer hour);
-
-    void clearExpiredTime(Long id);
 }
 

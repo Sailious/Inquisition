@@ -6,14 +6,17 @@ import moe.dazecake.inquisition.annotation.Login;
 import moe.dazecake.inquisition.model.dto.admin.ChangeAdminPasswordDTO;
 import moe.dazecake.inquisition.model.dto.admin.LoginAdminDTO;
 import moe.dazecake.inquisition.model.dto.admin.SetServerStatueDTO;
+import moe.dazecake.inquisition.model.entity.BillEntity;
 import moe.dazecake.inquisition.model.vo.admin.AddProUserBalanceDTO;
 import moe.dazecake.inquisition.model.vo.admin.AdminLoginVO;
+import moe.dazecake.inquisition.model.vo.query.PageQueryVO;
 import moe.dazecake.inquisition.service.impl.AdminServiceImpl;
 import moe.dazecake.inquisition.utils.DynamicInfo;
 import moe.dazecake.inquisition.utils.Result;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import java.util.List;
 
 @Tag(name = "管理员接口")
 @ResponseBody
@@ -59,6 +62,17 @@ public class AdminController {
     public Result<String> setServerStatus(@RequestBody SetServerStatueDTO statueDTO) {
         dynamicInfo.setActive(statueDTO.getActive());
         return Result.success("设置成功");
+    }
+
+    @Login
+    @Operation(summary = "分页查询所有订单")
+    @GetMapping("/getAllBill")
+    public Result<PageQueryVO<BillEntity>> getAllBill(Long current, Long size,
+            Long userId,
+            Integer state,
+            String orderNo,
+            String payType) {
+        return adminService.getAllBill(current, size, userId, state, orderNo, payType);
     }
 
 }

@@ -73,14 +73,3 @@ storage:
 
 inquisition:
   secret: xxx
-  pay:
-    enablePay: true
-    # MOSS密文模式配置
-    encryptMode: true # 启用密文模式，false为明文模式
-    mossPublicKey: "" # MOSS平台公钥
-    merPrivateKey: "" # 商户私钥
-    merPublicKey: "" # 商户公钥
-  backUrl: "https://api.sailwertech.top"
-  frontUrl: "https://sailwertech.top"
-  price:
-    daily: 1.0

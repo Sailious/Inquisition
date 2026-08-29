@@ -67,7 +67,9 @@ public class StatisticsServiceImpl implements StatisticsService {
         Double income = 0.0;
 
         for (BillEntity bill : bills) {
-            income += bill.getActualPayAmount();
+            if (bill.getActualPayAmount() != null) {
+                income += bill.getActualPayAmount();
+            }
         }
 
         return income;

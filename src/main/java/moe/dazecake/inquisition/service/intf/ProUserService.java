@@ -29,7 +29,8 @@ public interface ProUserService {
     /**
      * 分页查询高级用户账号
      *
-     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO < moe.dazecake.inquisition.model.dto.prouser.ProUserDTO>>
+     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO
+     *         < moe.dazecake.inquisition.model.dto.prouser.ProUserDTO>>
      * @author DazeCake
      * @date 2023/1/31 20:29
      */
@@ -83,7 +84,8 @@ public interface ProUserService {
      * @param type    子账号类型
      * @param current 当前页
      * @param size    每页大小
-     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO < moe.dazecake.inquisition.model.vo.account.AccountWithSanVO>>
+     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO
+     *         < moe.dazecake.inquisition.model.vo.account.AccountWithSanVO>>
      * @author DazeCake
      * @date 2023/3/25 18:30
      */
@@ -96,7 +98,8 @@ public interface ProUserService {
      * @param current 当前页
      * @param size    每页大小
      * @param keyword 关键字
-     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO < moe.dazecake.inquisition.model.dto.account.AccountDTO>>
+     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO
+     *         < moe.dazecake.inquisition.model.dto.account.AccountDTO>>
      * @author DazeCake
      * @date 2023/1/26 20:29
      */
@@ -119,7 +122,8 @@ public interface ProUserService {
      * @param userID  子账号ID
      * @param current 当前页
      * @param size    每页大小
-     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO < moe.dazecake.inquisition.model.dto.account.AccountDTO>>
+     * @return moe.dazecake.inquisition.utils.Result<moe.dazecake.inquisition.model.vo.query.PageQueryVO
+     *         < moe.dazecake.inquisition.model.dto.account.AccountDTO>>
      * @author DazeCake
      * @date 2023/1/26 20:42
      */
@@ -203,13 +207,15 @@ public interface ProUserService {
      * @author DazeCake
      * @date 2023/5/3 20:40
      */
-    Result<String> createSubUserByProUser(Long id, String name, String account, String password, Long server, Integer days);
+    Result<String> createSubUserByProUser(Long id, String name, String account, String password, Long server,
+            Integer days);
 
     /**
      * 获取最近到期的用户
      *
      * @param id 代理账号ID
-     * @return moe.dazecake.inquisition.utils.Result<java.util.ArrayList < moe.dazecake.inquisition.model.dto.account.AccountDTO>>
+     * @return moe.dazecake.inquisition.utils.Result<java.util.ArrayList <
+     *         moe.dazecake.inquisition.model.dto.account.AccountDTO>>
      * @author DazeCake
      * @date 2023/3/13 22:09
      */

@@ -6,6 +6,7 @@ import moe.dazecake.inquisition.annotation.Login;
 import moe.dazecake.inquisition.annotation.ProKey;
 import moe.dazecake.inquisition.annotation.ProUserLogin;
 import moe.dazecake.inquisition.annotation.UserLogin;
+import moe.dazecake.inquisition.annotation.UserOrProUserLogin;
 import moe.dazecake.inquisition.mapper.ProUserMapper;
 import moe.dazecake.inquisition.model.entity.ProUserEntity;
 import moe.dazecake.inquisition.utils.JWTUtils;
@@ -32,13 +33,13 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response,
-                             @NotNull Object handler) {
+            @NotNull Object handler) {
 
         if (!(handler instanceof HandlerMethod)) {
             return true;
         }
 
-        //开发模式跳过jwt检查
+        // 开发模式跳过jwt检查
         if (devMode) {
             return true;
         }
@@ -50,21 +51,20 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
 
         HandlerMethod method = (HandlerMethod) handler;
 
-        //ProKey验证
+        // ProKey验证
         var proKey = method.getMethod().getAnnotation(ProKey.class);
         if (proKey != null) {
             var proUser = proUserMapper.selectOne(
                     Wrappers.<ProUserEntity>lambdaQuery()
                             .eq(ProUserEntity::getAuthorization, token)
-                            .eq(ProUserEntity::getPermission, "pro")
-            );
+                            .eq(ProUserEntity::getPermission, "pro"));
             if (proUser == null) {
                 response.setStatus(403);
                 return false;
             }
         }
 
-        //管理员登陆验证
+        // 管理员登陆验证
         var login = method.getMethod().getAnnotation(Login.class);
         if (login != null) {
             if (JWTUtils.verifyToken(token) && Objects.equals(JWTUtils.getType(Objects.requireNonNull(token)),
@@ -76,7 +76,7 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
             }
         }
 
-        //高级用户登陆验证
+        // 高级用户登陆验证
         var proUserLogin = method.getMethod().getAnnotation(ProUserLogin.class);
         if (proUserLogin != null) {
             if (JWTUtils.verifyToken(token) && Objects.equals(JWTUtils.getType(Objects.requireNonNull(token)),
@@ -88,7 +88,7 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
             }
         }
 
-        //用户登陆验证
+        // 用户登陆验证
         var userLogin = method.getMethod().getAnnotation(UserLogin.class);
         if (userLogin != null) {
             if (JWTUtils.verifyToken(token) && Objects.equals(JWTUtils.getType(Objects.requireNonNull(token)),
@@ -99,7 +99,20 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
                 return false;
             }
         }
+
+        // 用户或代理登陆验证
+        var userOrProUserLogin = method.getMethod().getAnnotation(UserOrProUserLogin.class);
+        if (userOrProUserLogin != null) {
+            if (JWTUtils.verifyToken(token)) {
+                String type = JWTUtils.getType(Objects.requireNonNull(token));
+                if ("user".equals(type) || "proUser".equals(type)) {
+                    return true;
+                }
+            }
+            response.setStatus(401);
+            return false;
+        }
+
         return true;
     }
-
 }
