@@ -45,6 +45,6 @@ dependencies {
 }
 // 配置打包时的资源处理
 bootJar {
-    // 排除内部的application.yml，这样外部的配置文件会被优先使用
+    // 排除内部的application.yml：云托管部署通过环境变量注入配置（SPRING_DATASOURCE_*等）
     exclude 'application.yml'
 }
