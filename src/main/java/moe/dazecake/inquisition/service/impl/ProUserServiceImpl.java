@@ -31,6 +31,7 @@ import moe.dazecake.inquisition.utils.DynamicInfo;
 import moe.dazecake.inquisition.utils.Encoder;
 import moe.dazecake.inquisition.utils.JWTUtils;
 import moe.dazecake.inquisition.utils.Result;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -40,8 +41,12 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 
+@Slf4j
 @Service
 public class ProUserServiceImpl implements ProUserService {
+
+    /** 旧版密码盐值，仅用于兼容历史 MD5 哈希的登录校验 */
+    private static final String LEGACY_SALT = "arklightspro";
 
     @Resource
     private DynamicInfo dynamicInfo;
@@ -99,16 +104,41 @@ public class ProUserServiceImpl implements ProUserService {
         if (proUserLoginDTO.getUsername() == null || proUserLoginDTO.getPassword() == null) {
             return Result.paramError("用户名或密码不能为空");
         }
-        // 先按用户名查询，再用 BCrypt 校验密码
+        // 先按用户名查询，再校验密码
         var account = proUserMapper.selectOne(
                 Wrappers.<ProUserEntity>lambdaQuery()
                         .eq(ProUserEntity::getUsername, proUserLoginDTO.getUsername())
         );
-        if (account != null && Encoder.BCryptMatches(proUserLoginDTO.getPassword(), account.getPassword())) {
+        if (account != null && verifyPassword(proUserLoginDTO.getPassword(), account.getPassword())) {
+            // 旧版 MD5 哈希登录成功时，自动升级为 BCrypt
+            if (!isBcrypt(account.getPassword())) {
+                account.setPassword(Encoder.BCrypt(proUserLoginDTO.getPassword()));
+                proUserMapper.updateById(account);
+                log.info("代理商 {} 的密码已自动升级为 BCrypt", account.getUsername());
+            }
             return Result.success(new ProUserLoginVO(JWTUtils.generateTokenForProUser(account)), "登录成功");
         } else {
             return Result.unauthorized("用户名或密码错误");
         }
+    }
+
+    /**
+     * 密码校验：优先 BCrypt，失败则回退旧版 MD5(密码+盐)。
+     * MD5 不可逆，无法批量迁移，故采用「登录时校验并升级」的方式平滑过渡。
+     */
+    private boolean verifyPassword(String rawPassword, String stored) {
+        if (stored == null) {
+            return false;
+        }
+        if (Encoder.BCryptMatches(rawPassword, stored)) {
+            return true;
+        }
+        return Encoder.MD5(rawPassword + LEGACY_SALT).equalsIgnoreCase(stored);
+    }
+
+    /** 判断是否为 BCrypt 哈希（以 $2a$ / $2b$ / $2y$ 开头） */
+    private boolean isBcrypt(String hash) {
+        return hash != null && (hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$"));
     }
 
     @Override
@@ -125,7 +155,7 @@ public class ProUserServiceImpl implements ProUserService {
     public Result<String> updateProUserPassword(Long id, UpdateProUserPasswordDTO updateProUserPasswordDTO) {
         var old = proUserMapper.selectById(id);
 
-        if (Encoder.BCryptMatches(updateProUserPasswordDTO.getOldPassword(), old.getPassword())) {
+        if (verifyPassword(updateProUserPasswordDTO.getOldPassword(), old.getPassword())) {
             old.setPassword(Encoder.BCrypt(updateProUserPasswordDTO.getNewPassword()));
             proUserMapper.updateById(old);
             return Result.success("修改成功");

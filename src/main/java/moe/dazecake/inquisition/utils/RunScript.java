@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
@@ -45,6 +46,16 @@ public class RunScript implements ApplicationRunner {
     @Value("${inquisition.dev_mode:false}")
     boolean devMode;
 
+    /** 初始管理员账号名，默认 root */
+    @Value("${inquisition.admin.init-username:root}")
+    String adminInitUsername;
+
+    /**
+     * 初始管理员密码。配置后密码不会输出到日志；未配置时才随机生成并打印。
+     */
+    @Value("${inquisition.admin.init-password:}")
+    String adminInitPassword;
+
     @Override
     public void run(ApplicationArguments args) throws Exception {
         log.info("【审判庭初始化】 执行中...");
@@ -69,15 +80,27 @@ public class RunScript implements ApplicationRunner {
             // 检查admin表是否有数据
             List<AdminEntity> adminEntities = adminMapper.selectList(null);
             if (adminEntities.isEmpty()) {
-                // C5 修复：移除硬编码的默认弱口令哈希，改为启动时生成强随机密码并打印一次性提示
+                // C5 修复：移除硬编码的默认弱口令哈希
+                // 优先使用环境变量配置的初始密码（不落日志），未配置时才随机生成
+                String username = StringUtils.hasText(adminInitUsername) ? adminInitUsername.trim() : "root";
                 AdminEntity adminEntity = new AdminEntity();
-                adminEntity.setUsername("root");
-                String initPassword = RandomStringUtils.randomAlphanumeric(24);
-                adminEntity.setPassword(Encoder.BCrypt(adminEntity.getUsername() + initPassword));
+                adminEntity.setUsername(username);
                 adminEntity.setPermission("root");
+
+                boolean useConfigured = StringUtils.hasText(adminInitPassword);
+                String initPassword = useConfigured ? adminInitPassword
+                        : RandomStringUtils.randomAlphanumeric(24);
+                // 注意：BCrypt 只哈希密码本身，不要拼接 username，否则与登录校验不一致
+                adminEntity.setPassword(Encoder.BCrypt(initPassword));
                 adminMapper.insert(adminEntity);
-                log.warn("【安全提示】 已创建初始管理员账号: root");
-                log.warn("【安全提示】 初始密码（仅显示一次，请立即登录后修改）: {}", initPassword);
+
+                log.warn("【安全提示】 已创建初始管理员账号: root，请首次登录后立即修改密码");
+                if (useConfigured) {
+                    log.warn("【安全提示】 初始密码来源: 环境变量 INQUISITION_ADMIN_INIT_PASSWORD（未写入日志）");
+                } else {
+                    log.warn("【安全提示】 初始密码（随机生成，仅显示一次）: {}", initPassword);
+                    log.warn("【安全警告】 该密码已明文输出到日志，请立即登录修改并清理本条日志");
+                }
             }
 
             var devices = deviceMapper.selectList(

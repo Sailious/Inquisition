@@ -66,9 +66,10 @@ public class TaskServiceImpl implements TaskService {
             return Result.failed("审判庭暂停任务授权中");
         }
 
-        // 设备合法性检查
+        // 设备合法性检查（安全修复：同时校验设备未被逻辑删除，防止已删除设备继续领取任务）
         var device = deviceMapper.selectOne(Wrappers.<DeviceEntity>lambdaQuery()
-                .eq(DeviceEntity::getDeviceToken, deviceToken));
+                .eq(DeviceEntity::getDeviceToken, deviceToken)
+                .eq(DeviceEntity::getDelete, 0));
         if (device == null) {
             return Result.unauthorized("设备未授权");
         }
