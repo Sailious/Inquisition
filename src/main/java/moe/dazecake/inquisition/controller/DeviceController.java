@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import moe.dazecake.inquisition.annotation.Login;
 import moe.dazecake.inquisition.constant.enums.TaskType;
 import moe.dazecake.inquisition.model.dto.device.*;
-import moe.dazecake.inquisition.model.vo.device.DeviceScreenshotVO;
 import moe.dazecake.inquisition.model.vo.device.DeviceVO;
 import moe.dazecake.inquisition.model.vo.device.LoadDeviceVO;
 import moe.dazecake.inquisition.model.vo.query.PageQueryVO;
@@ -72,20 +71,6 @@ public class DeviceController {
     @PostMapping("/isScopeDeviceFree")
     public Result<Boolean> isScopeDeviceFree(DeviceTypeDTO type) {
         return deviceService.isScopeDeviceFree(TaskType.getByStr(type.getType()));
-    }
-
-    @Login
-    @Operation(summary = "通过设备token获取华云设备实时截图参数")
-    @PostMapping("/getDeviceScreenshotInfo")
-    public Result<DeviceScreenshotVO> getDeviceScreenshotInfo(@RequestBody GroupChinacDeviceDTO groupChinacDeviceDTO) {
-        return Result.success(deviceService.getGroupChinacDeviceScreenshot(groupChinacDeviceDTO), "获取成功");
-    }
-
-    @Login
-    @Operation(summary = "通过设备token获取华云设备远程控制url")
-    @PostMapping("/getDeviceRemoteControlUrl")
-    public Result<String> getDeviceRemoteControlUrl(@RequestBody DeviceTokenDTO deviceTokenDTO) {
-        return deviceService.getChinacRemoteControlUrl(deviceTokenDTO.getToken());
     }
 
 }

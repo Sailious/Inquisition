@@ -2,7 +2,6 @@ package moe.dazecake.inquisition.service.intf;
 
 import moe.dazecake.inquisition.constant.enums.TaskType;
 import moe.dazecake.inquisition.model.dto.device.*;
-import moe.dazecake.inquisition.model.vo.device.DeviceScreenshotVO;
 import moe.dazecake.inquisition.model.vo.device.DeviceVO;
 import moe.dazecake.inquisition.model.vo.device.LoadDeviceVO;
 import moe.dazecake.inquisition.model.vo.query.PageQueryVO;
@@ -26,15 +25,6 @@ public interface DeviceService {
      * @date 2023/1/26 12:43
      */
     void addCommonDevice(AddCommonDeviceDTO addCommonDeviceDTO);
-
-    /**
-     * 添加chinac设备
-     *
-     * @param addChinacDeviceDTO chinac设备参数
-     * @author DazeCake
-     * @date 2023/1/26 12:43
-     */
-    void addChinacDevice(AddChinacDeviceDTO addChinacDeviceDTO);
 
     /**
      * 删除设备
@@ -93,24 +83,4 @@ public interface DeviceService {
      * @date 2023/5/3 10:46
      */
     Result<Boolean> isScopeDeviceFree(TaskType type);
-
-    /**
-     * 获取设备截图
-     *
-     * @param groupChinacDeviceDTO 设备参数
-     * @return moe.dazecake.inquisition.model.vo.device.DeviceScreenshotVO 设备截图信息
-     * @author DazeCake
-     * @date 2023/1/26 14:07
-     */
-    DeviceScreenshotVO getGroupChinacDeviceScreenshot(GroupChinacDeviceDTO groupChinacDeviceDTO);
-
-    /**
-     * 获取chinac设备远程控制url
-     *
-     * @param deviceToken chinac设备token
-     * @return java.lang.String 远程控制url
-     * @author DazeCake
-     * @date 2023/1/26 14:08
-     */
-    Result<String> getChinacRemoteControlUrl(String deviceToken);
 }

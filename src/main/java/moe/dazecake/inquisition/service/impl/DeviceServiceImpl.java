@@ -9,7 +9,6 @@ import moe.dazecake.inquisition.mapper.mapstruct.DeviceConvert;
 import moe.dazecake.inquisition.model.dto.device.*;
 import moe.dazecake.inquisition.model.entity.AccountEntity;
 import moe.dazecake.inquisition.model.entity.DeviceEntity;
-import moe.dazecake.inquisition.model.vo.device.DeviceScreenshotVO;
 import moe.dazecake.inquisition.model.vo.device.DeviceVO;
 import moe.dazecake.inquisition.model.vo.device.LoadDevice;
 import moe.dazecake.inquisition.model.vo.device.LoadDeviceVO;
@@ -31,9 +30,6 @@ public class DeviceServiceImpl implements DeviceService {
     DeviceMapper deviceMapper;
 
     @Resource
-    ChinacServiceImpl chinacService;
-
-    @Resource
     AccountMapper accountMapper;
 
     @Override
@@ -47,11 +43,6 @@ public class DeviceServiceImpl implements DeviceService {
         var dto = DeviceConvert.INSTANCE.toAddDeviceDTO(addCommonDeviceDTO);
         dto.getWorkScope().add("daily");
         addDevice(dto);
-    }
-
-    @Override
-    public void addChinacDevice(AddChinacDeviceDTO addChinacDeviceDTO) {
-        addDevice(DeviceConvert.INSTANCE.toAddDeviceDTO(addChinacDeviceDTO));
     }
 
     @Override
@@ -90,15 +81,11 @@ public class DeviceServiceImpl implements DeviceService {
                 dynamicInfo.getDeviceStatusMap().put(device.getDeviceToken(), 0);
             }
 
-            if (device.getChinac() == null) {
-                device.setChinac(0);
-            }
             var loadDevice = new LoadDevice();
             loadDevice.setId(device.getId());
             loadDevice.setDeviceName(device.getDeviceName());
             loadDevice.setDeviceToken(device.getDeviceToken());
             loadDevice.setWorkScope(device.getWorkScope());
-            loadDevice.setChinac(device.getChinac());
             loadDevice.setRegion(device.getRegion());
             loadDevice.setExpireTime(device.getExpireTime());
             loadDevice.setDelete(device.getDelete());
@@ -142,29 +129,6 @@ public class DeviceServiceImpl implements DeviceService {
             }
         }
         return Result.success(false, "无空闲设备");
-    }
-
-    @Override
-    public DeviceScreenshotVO getGroupChinacDeviceScreenshot(GroupChinacDeviceDTO groupChinacDeviceDTO) {
-        return new DeviceScreenshotVO(chinacService.getDeviceScreenshot(groupChinacDeviceDTO.getTokenList(), groupChinacDeviceDTO.getRegion()));
-    }
-
-    @Override
-    public Result<String> getChinacRemoteControlUrl(String deviceToken) {
-        DeviceEntity device = deviceMapper.selectOne(Wrappers.<DeviceEntity>lambdaQuery()
-                .eq(DeviceEntity::getDeviceToken, deviceToken));
-        if (device == null || device.getChinac() != 1 || device.getDelete() == 1) {
-            return Result.forbidden("设备不存在或不是Chinac设备");
-        } else {
-            return Result.success(chinacService.getDeviceRemoteControlUrl(
-                    device.getRegion(),
-                    device.getDeviceToken(),
-                    30,
-                    false,
-                    false,
-                    null
-            ), "获取成功");
-        }
     }
 
     private PageQueryVO<DeviceVO> getDevicePageQueryVO(Page<DeviceEntity> data) {

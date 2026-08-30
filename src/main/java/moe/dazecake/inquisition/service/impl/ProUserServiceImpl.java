@@ -43,8 +43,6 @@ import java.util.ArrayList;
 @Service
 public class ProUserServiceImpl implements ProUserService {
 
-    private static final String salt = "arklightspro";
-
     @Resource
     private DynamicInfo dynamicInfo;
 
@@ -78,7 +76,7 @@ public class ProUserServiceImpl implements ProUserService {
     @Override
     public void CreateProUser(CreateProUserDTO createProUserDTO) {
         var proUserEntity = ProUserConvert.INSTANCE.toProUserEntity(createProUserDTO);
-        proUserEntity.setPassword(Encoder.MD5(proUserEntity.getPassword() + salt));
+        proUserEntity.setPassword(Encoder.BCrypt(proUserEntity.getPassword()));
         proUserMapper.insert(proUserEntity);
     }
 
@@ -91,7 +89,7 @@ public class ProUserServiceImpl implements ProUserService {
     @Override
     public Result<String> updateProUser(ProUserDTO proUserDTO) {
         var proUserEntity = ProUserConvert.INSTANCE.toProUserEntity(proUserDTO);
-        proUserEntity.setPassword(Encoder.MD5(proUserEntity.getPassword() + salt));
+        proUserEntity.setPassword(Encoder.BCrypt(proUserEntity.getPassword()));
         proUserMapper.updateById(proUserEntity);
         return Result.success("修改成功");
     }
@@ -101,12 +99,12 @@ public class ProUserServiceImpl implements ProUserService {
         if (proUserLoginDTO.getUsername() == null || proUserLoginDTO.getPassword() == null) {
             return Result.paramError("用户名或密码不能为空");
         }
+        // 先按用户名查询，再用 BCrypt 校验密码
         var account = proUserMapper.selectOne(
                 Wrappers.<ProUserEntity>lambdaQuery()
                         .eq(ProUserEntity::getUsername, proUserLoginDTO.getUsername())
-                        .eq(ProUserEntity::getPassword, Encoder.MD5(proUserLoginDTO.getPassword() + salt))
         );
-        if (account != null) {
+        if (account != null && Encoder.BCryptMatches(proUserLoginDTO.getPassword(), account.getPassword())) {
             return Result.success(new ProUserLoginVO(JWTUtils.generateTokenForProUser(account)), "登录成功");
         } else {
             return Result.unauthorized("用户名或密码错误");
@@ -127,8 +125,8 @@ public class ProUserServiceImpl implements ProUserService {
     public Result<String> updateProUserPassword(Long id, UpdateProUserPasswordDTO updateProUserPasswordDTO) {
         var old = proUserMapper.selectById(id);
 
-        if (Encoder.MD5(updateProUserPasswordDTO.getOldPassword() + salt).equals(old.getPassword())) {
-            old.setPassword(Encoder.MD5(updateProUserPasswordDTO.getNewPassword() + salt));
+        if (Encoder.BCryptMatches(updateProUserPasswordDTO.getOldPassword(), old.getPassword())) {
+            old.setPassword(Encoder.BCrypt(updateProUserPasswordDTO.getNewPassword()));
             proUserMapper.updateById(old);
             return Result.success("修改成功");
         } else {

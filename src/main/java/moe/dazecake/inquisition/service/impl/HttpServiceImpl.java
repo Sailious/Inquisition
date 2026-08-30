@@ -10,6 +10,7 @@ import moe.dazecake.inquisition.service.intf.HttpService;
 import moe.dazecake.inquisition.utils.Encoder;
 import okhttp3.*;
 import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
 import java.nio.charset.StandardCharsets;

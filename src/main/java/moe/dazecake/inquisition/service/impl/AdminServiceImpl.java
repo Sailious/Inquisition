@@ -23,8 +23,6 @@ import javax.annotation.Resource;
 @Service
 public class AdminServiceImpl implements AdminService {
 
-    private static final String salt = "arklightscloud";
-
     @Resource
     AdminMapper adminMapper;
 
@@ -40,12 +38,12 @@ public class AdminServiceImpl implements AdminService {
             return Result.paramError("用户名或密码为空");
         }
 
+        // 先按用户名查询，再用 BCrypt 校验密码（避免在SQL条件中比对哈希）
         var admin = adminMapper.selectOne(
                 Wrappers.<AdminEntity>lambdaQuery()
-                        .eq(AdminEntity::getUsername, loginAdminDTO.getUsername())
-                        .eq(AdminEntity::getPassword, Encoder.MD5(loginAdminDTO.getPassword() + salt)));
+                        .eq(AdminEntity::getUsername, loginAdminDTO.getUsername()));
 
-        if (admin != null) {
+        if (admin != null && Encoder.BCryptMatches(loginAdminDTO.getPassword(), admin.getPassword())) {
             return Result.success(new AdminLoginVO(JWTUtils.generateTokenForAdmin(admin)), "登录成功");
         } else {
             return Result.unauthorized("用户名或密码错误");
@@ -61,11 +59,10 @@ public class AdminServiceImpl implements AdminService {
 
         var admin = adminMapper.selectOne(
                 Wrappers.<AdminEntity>lambdaQuery()
-                        .eq(AdminEntity::getUsername, changeAdminPasswordDTO.getUsername())
-                        .eq(AdminEntity::getPassword, Encoder.MD5(changeAdminPasswordDTO.getOldPassword() + salt)));
+                        .eq(AdminEntity::getUsername, changeAdminPasswordDTO.getUsername()));
 
-        if (admin != null) {
-            admin.setPassword(Encoder.MD5(changeAdminPasswordDTO.getNewPassword() + salt));
+        if (admin != null && Encoder.BCryptMatches(changeAdminPasswordDTO.getOldPassword(), admin.getPassword())) {
+            admin.setPassword(Encoder.BCrypt(changeAdminPasswordDTO.getNewPassword()));
             adminMapper.updateById(admin);
             return Result.success("修改成功");
         } else {

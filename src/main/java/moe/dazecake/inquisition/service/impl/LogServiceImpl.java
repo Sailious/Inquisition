@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 
 @Service
 public class LogServiceImpl implements LogService {
+
     @Resource
     LogMapper logMapper;
 
@@ -52,7 +53,31 @@ public class LogServiceImpl implements LogService {
             //去除 "hikay960q4 "
             logEntity.setDetail(logEntity.getDetail().replace("hikay960q4 ", ""));
         }
+        // H3 修复：对日志内容做HTML转义，防止存储型XSS
+        if (logEntity.getDetail() != null) {
+            logEntity.setDetail(escapeHtml(logEntity.getDetail()));
+        }
+        if (logEntity.getTitle() != null) {
+            logEntity.setTitle(escapeHtml(logEntity.getTitle()));
+        }
+        if (logEntity.getImageUrl() != null) {
+            logEntity.setImageUrl(escapeHtml(logEntity.getImageUrl()));
+        }
         logMapper.insert(logEntity);
+    }
+
+    /**
+     * H3 修复：HTML 实体转义，防止存储型 XSS。
+     */
+    private String escapeHtml(String input) {
+        if (input == null) {
+            return null;
+        }
+        return input.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     @Override

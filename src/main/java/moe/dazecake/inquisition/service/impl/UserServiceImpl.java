@@ -4,18 +4,17 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.zjiecode.wxpusher.client.WxPusher;
 import com.zjiecode.wxpusher.client.bean.CreateQrcodeReq;
 import moe.dazecake.inquisition.mapper.AccountMapper;
-import moe.dazecake.inquisition.mapper.BillMapper;
 import moe.dazecake.inquisition.mapper.ProUserMapper;
 import moe.dazecake.inquisition.mapper.mapstruct.AccountConvert;
 import moe.dazecake.inquisition.model.dto.account.AccountDTO;
 import moe.dazecake.inquisition.model.dto.log.LogDTO;
-import moe.dazecake.inquisition.model.dto.user.CreateUserByPayDTO;
 import moe.dazecake.inquisition.model.dto.user.UserStatusSTO;
 import moe.dazecake.inquisition.model.entity.AccountEntity;
 import moe.dazecake.inquisition.model.vo.UserLoginVO;
 import moe.dazecake.inquisition.model.vo.query.PageQueryVO;
 import moe.dazecake.inquisition.service.intf.UserService;
 import moe.dazecake.inquisition.utils.DynamicInfo;
+import moe.dazecake.inquisition.utils.Encoder;
 import moe.dazecake.inquisition.utils.JWTUtils;
 import moe.dazecake.inquisition.utils.Result;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,16 +44,10 @@ public class UserServiceImpl implements UserService {
     CDKServiceImpl cdkService;
 
     @Resource
-    PayServiceImpl payService;
-
-    @Resource
     TaskServiceImpl taskService;
 
     @Resource
     AccountServiceImpl accountService;
-
-    @Resource
-    BillMapper billMapper;
 
     @Resource
     ProUserMapper proUserMapper;
@@ -75,38 +68,9 @@ public class UserServiceImpl implements UserService {
         var newAccount = new AccountEntity();
         newAccount.setName(username)
                 .setAccount(account)
-                .setPassword(password);
+                // C2 修复：密码 AES 加密存储
+                .setPassword(Encoder.encrypt(password));
         return cdkService.createUserByCDK(newAccount, cdk);
-    }
-
-    @Override
-    public Result<String> createUserByPay(CreateUserByPayDTO createUserByPayDTO, String username, String account, String password, Integer server) {
-        if (username.contains("|") || account.contains("|") || password.contains("|")) {
-            return Result.paramError("用户名，账号，密码中不能包含 | 字符");
-        }
-        if (createUserByPayDTO.getAgent() != 0) {
-            var proUser = proUserMapper.selectById(createUserByPayDTO.getAgent());
-            if (proUser == null) {
-                return Result.notFound("代理商不存在");
-            }
-        }
-
-        if (accountMapper.selectList(Wrappers.<AccountEntity>lambdaQuery()
-                .eq(AccountEntity::getAccount, account)).size() != 0) {
-            return Result.forbidden("账号已存在，请直接登录");
-        }
-
-        var bill = payService.createOrder(1.0, createUserByPayDTO.getPayType(), "/auth/user/");
-        bill.setType("register")
-                .setParam(username + "|" + account + "|" + password + "|" + server);
-        if (createUserByPayDTO.getAgent() != 0) {
-            bill.setParam(bill.getParam() + "|" + createUserByPayDTO.getAgent());
-        } else {
-            bill.setParam(bill.getParam() + "|0");
-        }
-        billMapper.updateById(bill);
-
-        return Result.success(bill.getPayUrl(), "请在支付成功后直接登录");
     }
 
     @Override
@@ -115,20 +79,22 @@ public class UserServiceImpl implements UserService {
             return Result.unauthorized("请输入账号密码");
         }
 
+        // C2 修复：先按账号查询，再解密比对密码（不在SQL条件中比对明文）
         var user = accountMapper.selectOne(
                 Wrappers.<AccountEntity>lambdaQuery()
                         .eq(AccountEntity::getAccount, account)
-                        .eq(AccountEntity::getPassword, password)
         );
 
         if (user != null) {
             if (user.getDelete() == 1) {
                 return Result.forbidden("账号已被删除，请联系管理员解除");
             }
-            return Result.success(new UserLoginVO(JWTUtils.generateTokenForUser(user)), "登录成功");
-        } else {
-            return Result.unauthorized("账号或密码错误");
+            // 解密存储的密码并与输入比对
+            if (password.equals(Encoder.decrypt(user.getPassword()))) {
+                return Result.success(new UserLoginVO(JWTUtils.generateTokenForUser(user)), "登录成功");
+            }
         }
+        return Result.unauthorized("账号或密码错误");
     }
 
     @Override
@@ -184,7 +150,8 @@ public class UserServiceImpl implements UserService {
         if (server == 0) {
             if (httpService.isOfficialAccountWork(account, password)) {
                 accountEntity.setAccount(account);
-                accountEntity.setPassword(password);
+                // C2 修复：密码 AES 加密存储
+                accountEntity.setPassword(Encoder.encrypt(password));
                 accountEntity.setServer(server);
                 accountEntity.setUpdateTime(LocalDateTime.now());
                 accountMapper.updateById(accountEntity);
@@ -194,7 +161,8 @@ public class UserServiceImpl implements UserService {
         } else if (server == 1) {
             if (httpService.isBiliAccountWork(account, password)) {
                 accountEntity.setAccount(account);
-                accountEntity.setPassword(password);
+                // C2 修复：密码 AES 加密存储
+                accountEntity.setPassword(Encoder.encrypt(password));
                 accountEntity.setServer(server);
                 accountEntity.setFreeze(0);
                 accountEntity.getBLimitDevice().clear();
