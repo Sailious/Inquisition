@@ -45,6 +45,6 @@ dependencies {
 }
 // 配置打包时的资源处理
 bootJar {
-    // 排除内部的application.yml：云托管部署通过环境变量注入配置（SPRING_DATASOURCE_*等）
-    exclude 'application.yml'
+    // application.yml 打包进 jar（含 mybatis/actable 必需配置）
+    // 云端敏感配置通过环境变量覆盖（优先级高于 jar 内 yml），本地外部 config/application.yml 优先级同样更高
 }
