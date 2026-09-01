@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 
 @Service
 public class LogServiceImpl implements LogService {
+
     @Resource
     LogMapper logMapper;
 
@@ -52,13 +53,37 @@ public class LogServiceImpl implements LogService {
             //去除 "hikay960q4 "
             logEntity.setDetail(logEntity.getDetail().replace("hikay960q4 ", ""));
         }
+        // H3 修复：对日志文本做HTML转义，防止存储型XSS
+        // 注意：imageUrl 不转义 —— COS 预签名URL含 & 查询参数，转义会导致签名失效、前端图片加载失败
+        if (logEntity.getDetail() != null) {
+            logEntity.setDetail(escapeHtml(logEntity.getDetail()));
+        }
+        if (logEntity.getTitle() != null) {
+            logEntity.setTitle(escapeHtml(logEntity.getTitle()));
+        }
         logMapper.insert(logEntity);
+    }
+
+    /**
+     * H3 修复：HTML 实体转义，防止存储型 XSS。
+     */
+    private String escapeHtml(String input) {
+        if (input == null) {
+            return null;
+        }
+        return input.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     @Override
     public Result<String> uploadImage(AddImageDTO addImageDTO) {
+        // 安全修复：同时校验设备未被逻辑删除，防止已删除设备继续上传文件
         var device = deviceMapper.selectOne(Wrappers.<DeviceEntity>lambdaQuery()
-                .eq(DeviceEntity::getDeviceToken, addImageDTO.getDeviceToken()));
+                .eq(DeviceEntity::getDeviceToken, addImageDTO.getDeviceToken())
+                .eq(DeviceEntity::getDelete, 0));
         if (device == null) {
             return Result.notFound("设备不存在");
         }

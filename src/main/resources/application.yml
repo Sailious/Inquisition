@@ -1,28 +1,30 @@
 server:
   port: 2000 # 端口
   ssl:
-    key-store: "xxx"
+    key-store: ${SSL_KEY_STORE:}
     key-store-type: PKCS12
-    key-store-password: "xxx"
-    enabled: false # 启用ssl
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:}
+    enabled: false
 
 spring:
   # 数据库配置（缩进严格为2个空格）
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://mysql2.sqlpub.com:3307/inquisition?useSSL=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: sailious
-    password: kZKBYz5UrtSLSOKK
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:inquisition}?useSSL=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=false
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     type: com.alibaba.druid.pool.DruidDataSource
   mail:
-    enabled: false # 修正：enable → enabled（Spring Mail标准配置项）
-    host: smtp.qq.com # 邮件服务器地址
-    port: 465 # 邮件服务器端口
-    protocol: smtps # 邮件协议
-    username: "xxx@qq.com" # 邮件发送者账号
-    password: "xxx" # 邮件发送者密码 (部分邮箱如QQ邮箱使用授权码)
-    from: "xxx@qq.com" # 邮件发送者邮箱
-    to: "xxx@qq.com" # 邮件接收者邮箱
+    enable: ${MAIL_ENABLE:false}
+    enabled: ${MAIL_ENABLE:false}
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
+    protocol: smtps
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:}
+    to: ${MAIL_TO:}
+    nickname: ${MAIL_NICKNAME:阿戈尔科技}
   output:
     ansi:
       enabled: always
@@ -43,33 +45,53 @@ mybatis-plus:
   mapper-locations: classpath*:com/gitee/sunchenbin/mybatis/actable/mapping/*/*.xml
   configuration:
     log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
-#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # wxpusher配置
 wx-pusher:
-  enable: false
-  app-token: AT_N5mZBL4DLeJxoPiXNkc1MNr49VyTOxxJ
+  enable: ${WXPUSHER_ENABLE:false}
+  app-token: ${WXPUSHER_APP_TOKEN:}
 
 # qmsg配置 - QQ消息推送
 qmsg:
-  enable: true
-  key: "8e49bb99e28beb8e5805cd2aaf9dc33c"
+  enable: ${QMSG_ENABLE:true}
+  key: ${QMSG_KEY:}
 
 # 存储配置 用于存储日志截图 需要自行配置删除规则
 storage:
   oss:
     #腾讯云COS
-    enable: false
-    secretId: xxxx
-    secretKey: xxxx
-    bucket: xxx-xxx
-    region: xxx
+    enable: ${OSS_ENABLE:false}
+    secretId: ${OSS_SECRET_ID:}
+    secretKey: ${OSS_SECRET_KEY:}
+    bucket: ${OSS_BUCKET:}
+    region: ${OSS_REGION:}
   chfs:
-    enable: false
-    url: http://chfsurl:port
-    username: name
-    password: yourpassword
-    uploadDir: /inquisition/log/img
+    enable: ${CHFS_ENABLE:false}
+    url: ${CHFS_URL:}
+    username: ${CHFS_USERNAME:}
+    password: ${CHFS_PASSWORD:}
+    uploadDir: ${CHFS_UPLOAD_DIR:/inquisition/log/img}
 
 inquisition:
-  secret: xxx
+  # JWT密钥：必须配置不少于32字符的随机字符串，否则启动时将拒绝启动
+  secret: ${INQUISITION_SECRET:}
+  # 开发模式：生产环境必须为false
+  dev_mode: ${INQUISITION_DEV_MODE:false}
+  # CORS 跨域配置
+  cors:
+    # 总开关：false=完全禁用跨域（仅同源访问），true=启用
+    enabled: ${INQUISITION_CORS_ENABLED:true}
+    # 白名单：逗号分隔的合法前端域名
+    #   填 *       = 允许所有来源（仅建议本地调试）
+    #   填具体域名 = 白名单模式
+    #   留空       = 仅允许同源访问
+    allowed-origins: ${INQUISITION_CORS_ORIGINS:}
+  # 每日价格
+  price:
+    daily: ${INQUISITION_PRICE_DAILY:1.0}
+  # 初始管理员账号（仅首次初始化、admin 表为空时生效）
+  admin:
+    # 账号名，默认 root
+    init-username: ${INQUISITION_ADMIN_INIT_USERNAME:root}
+    # 密码：配置后不会输出到日志；留空则随机生成并打印到日志
+    init-password: ${INQUISITION_ADMIN_INIT_PASSWORD:}

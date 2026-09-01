@@ -57,6 +57,13 @@ public class ImageServiceImpl implements ImageService {
 
     @Override
     public Result<String> uploadImage(String base64Image) {
+        if (base64Image == null || base64Image.isEmpty()) {
+            return Result.failed("图片内容为空");
+        }
+        // M5 修复：校验Base64大小，限制为5MB以内
+        if (base64Image.length() > 5 * 1024 * 1024) {
+            return Result.failed("图片过大，限制为5MB以内");
+        }
         if (ossEnable) {
             return uploadImageToCos(base64Image);
         } else if (chfsEnable) {

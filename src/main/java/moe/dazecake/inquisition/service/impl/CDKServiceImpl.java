@@ -130,7 +130,6 @@ public class CDKServiceImpl implements CDKService {
         var account = accountMapper.selectOne(
                 Wrappers.<AccountEntity>lambdaQuery()
                         .eq(AccountEntity::getAccount, accountEntity.getAccount())
-                        .eq(AccountEntity::getPassword, accountEntity.getPassword())
         );
         accountService.forceFightAccount(account.getId(), true);
 

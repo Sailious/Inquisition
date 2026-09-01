@@ -7,7 +7,10 @@ import moe.dazecake.inquisition.mapper.AccountMapper;
 import moe.dazecake.inquisition.model.dto.account.AccountDTO;
 import moe.dazecake.inquisition.model.dto.cdk.RawCDKDTO;
 import moe.dazecake.inquisition.model.dto.log.LogDTO;
-import moe.dazecake.inquisition.model.dto.user.*;
+import moe.dazecake.inquisition.model.dto.user.CreateUserByCDKDTO;
+import moe.dazecake.inquisition.model.dto.user.UpdateAccountAndPasswordDTO;
+import moe.dazecake.inquisition.model.dto.user.UserLoginDTO;
+import moe.dazecake.inquisition.model.dto.user.UserStatusSTO;
 import moe.dazecake.inquisition.model.entity.AccountEntity;
 import moe.dazecake.inquisition.model.entity.NoticeEntitySet.NoticeEntity;
 import moe.dazecake.inquisition.model.entity.NoticeEntitySet.WXUID;
@@ -47,16 +50,6 @@ public class UserController {
                 createUserByCDKDTO.getAccount(),
                 createUserByCDKDTO.getPassword(),
                 createUserByCDKDTO.getServer());
-    }
-
-    @Operation(summary = "使用在线支付创建我的账号")
-    @PostMapping("/createUserByPay")
-    public synchronized Result<String> createUserByPay(@RequestBody CreateUserByPayDTO createUserByPayDTO) {
-        return userService.createUserByPay(createUserByPayDTO,
-                createUserByPayDTO.getUsername(),
-                createUserByPayDTO.getAccount(),
-                createUserByPayDTO.getPassword(),
-                createUserByPayDTO.getServer());
     }
 
     @Operation(summary = "登陆我的账号")

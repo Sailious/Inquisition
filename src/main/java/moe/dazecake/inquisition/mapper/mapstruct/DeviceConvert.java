@@ -1,6 +1,5 @@
 package moe.dazecake.inquisition.mapper.mapstruct;
 
-import moe.dazecake.inquisition.model.dto.device.AddChinacDeviceDTO;
 import moe.dazecake.inquisition.model.dto.device.AddCommonDeviceDTO;
 import moe.dazecake.inquisition.model.dto.device.AddDeviceDTO;
 import moe.dazecake.inquisition.model.dto.device.UpdateDeviceDTO;
@@ -24,20 +23,12 @@ public interface DeviceConvert {
 
     @Mappings({
             @Mapping(target = "id", constant = "0L"),
-            @Mapping(target = "chinac", constant = "0"),
             @Mapping(target = "region", expression = "java(null)"),
             @Mapping(target = "delete", constant = "0"),
             @Mapping(target = "deviceToken", expression = "java(org.apache.commons.lang3.RandomStringUtils.randomAlphabetic(16))"),
             @Mapping(target = "workScope",expression = "java(new ArrayList<>())"),
     })
     AddDeviceDTO toAddDeviceDTO(AddCommonDeviceDTO addCommonDeviceDTO);
-
-    @Mappings({
-            @Mapping(target = "id", constant = "0L"),
-            @Mapping(target = "delete", constant = "0"),
-            @Mapping(target = "workScope",expression = "java(new ArrayList<>())"),
-    })
-    AddDeviceDTO toAddDeviceDTO(AddChinacDeviceDTO addChinacDeviceDTO);
 
     DeviceVO toDeviceVO(DeviceEntity deviceEntity);
 }

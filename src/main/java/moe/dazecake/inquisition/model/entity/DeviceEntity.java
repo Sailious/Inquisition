@@ -48,12 +48,8 @@ public class DeviceEntity {
     @TableField(typeHandler = GsonTypeHandler.class)
     ArrayList<String> workScope = new ArrayList<>();
 
-    @Column(name = "chinac", comment = "华云设备")
-    @Schema(description = "华云设备")
-    Integer chinac;
-
-    @Column(name = "region", comment = "华云设备地域")
-    @Schema(description = "华云设备地域")
+    @Column(name = "region", comment = "设备地域")
+    @Schema(description = "设备地域")
     String region;
 
     @Column(name = "expire_time", comment = "过期时间")
