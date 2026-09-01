@@ -13,6 +13,7 @@ import moe.dazecake.inquisition.model.entity.DeviceEntity;
 import moe.dazecake.inquisition.model.local.UserSan;
 import moe.dazecake.inquisition.service.intf.TaskService;
 import moe.dazecake.inquisition.utils.DynamicInfo;
+import moe.dazecake.inquisition.utils.Encoder;
 import moe.dazecake.inquisition.utils.Result;
 import moe.dazecake.inquisition.utils.TimeUtil;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,9 +66,10 @@ public class TaskServiceImpl implements TaskService {
             return Result.failed("审判庭暂停任务授权中");
         }
 
-        // 设备合法性检查
+        // 设备合法性检查（安全修复：同时校验设备未被逻辑删除，防止已删除设备继续领取任务）
         var device = deviceMapper.selectOne(Wrappers.<DeviceEntity>lambdaQuery()
-                .eq(DeviceEntity::getDeviceToken, deviceToken));
+                .eq(DeviceEntity::getDeviceToken, deviceToken)
+                .eq(DeviceEntity::getDelete, 0));
         if (device == null) {
             return Result.unauthorized("设备未授权");
         }
@@ -171,6 +173,8 @@ public class TaskServiceImpl implements TaskService {
                 // 理智归零
                 dynamicInfo.setUserSanZero(account.getId());
 
+                // C2 修复：解密密码后再返回给设备端
+                account.setPassword(Encoder.decrypt(account.getPassword()));
                 return Result.success(AccountConvert.INSTANCE.toAccountDTO(account), "获取成功");
 
             } else {
@@ -579,7 +583,8 @@ public class TaskServiceImpl implements TaskService {
             }
             case ("accountError"): {
                 if (account.getServer() == 0) {
-                    if (httpService.isOfficialAccountWork(account.getAccount(), account.getPassword())) {
+                    // C2 修复：解密密码后用于验证
+                    if (httpService.isOfficialAccountWork(account.getAccount(), Encoder.decrypt(account.getPassword()))) {
                         dynamicInfo.getFreezeUserInfoMap().put(account.getId(), LocalDateTime.now().plusHours(1));
                         dynamicInfo.getWaitUserList().add(account.getId());
                     } else {
@@ -589,7 +594,8 @@ public class TaskServiceImpl implements TaskService {
                         messageService.push(account, "账号异常", "您的账号密码有误，请在面板更新正确的账号密码，否则托管将无法继续进行");
                     }
                 } else if (account.getServer() == 1) {
-                    if (httpService.isBiliAccountWork(account.getAccount(), account.getPassword())) {
+                    // C2 修复：解密密码后用于验证
+                    if (httpService.isBiliAccountWork(account.getAccount(), Encoder.decrypt(account.getPassword()))) {
                         messageService.push(account, "账号异常", "您近期登陆的设备较多，已被B服限制登陆，请立即修改密码并于面板更新密码,否则托管可能将无法继续进行");
                     } else {
                         account.setFreeze(1);

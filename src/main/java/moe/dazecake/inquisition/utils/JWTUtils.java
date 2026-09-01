@@ -11,11 +11,21 @@ import java.util.Date;
 
 public class JWTUtils {
 
-    //    private static String SECRET = RandomStringUtils.randomAlphabetic(16);
-    public static String SECRET;
+    /**
+     * JWT签名密钥，由RunScript在启动时校验并注入。
+     * 安全要求：不少于32字符的随机字符串，禁止使用默认弱值。
+     */
+    private static String SECRET;
 
-
+    /** token 有效期：30 天 */
     private static final long EXPIRATION = 1000L * 60 * 60 * 24 * 30;
+
+    /**
+     * 启动时由 RunScript 注入已校验的密钥。
+     */
+    public static void initSecret(String secret) {
+        SECRET = secret;
+    }
 
     public static String generateTokenForAdmin(AdminEntity adminEntity) {
         JWTCreator.Builder builder = JWT.create();
@@ -46,31 +56,41 @@ public class JWTUtils {
     }
 
     public static boolean verifyToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return false;
+        }
         try {
-            if (token != null) {
-                JWT.require(Algorithm.HMAC256(SECRET)).build().verify(token);
-                return true;
-            } else {
-                return false;
-            }
+            JWT.require(Algorithm.HMAC256(SECRET)).build().verify(token);
+            return true;
         } catch (Exception e) {
             return false;
         }
     }
 
+    /**
+     * 从 Authorization 头中解析用户ID（去除 "Bearer " 前缀）。
+     */
     public static Long getId(String token) {
-        assert token != null;
+        if (token == null) {
+            throw new IllegalArgumentException("token must not be null");
+        }
         return JWT.decode(token.substring(7)).getClaim("id").asLong();
     }
 
     public static String getAccount(String token) {
-        assert token != null;
+        if (token == null) {
+            throw new IllegalArgumentException("token must not be null");
+        }
         return JWT.decode(token.substring(7)).getClaim("account").asString();
     }
 
+    /**
+     * 注意：此方法接收的 token 不含 "Bearer " 前缀。
+     */
     public static String getType(String token) {
-        assert token != null;
+        if (token == null) {
+            throw new IllegalArgumentException("token must not be null");
+        }
         return JWT.decode(token).getClaim("type").asString();
     }
 }
-

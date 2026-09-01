@@ -6,7 +6,6 @@ import moe.dazecake.inquisition.mapper.AccountMapper;
 import moe.dazecake.inquisition.mapper.DeviceMapper;
 import moe.dazecake.inquisition.model.entity.AccountEntity;
 import moe.dazecake.inquisition.model.entity.DeviceEntity;
-import moe.dazecake.inquisition.service.impl.ChinacServiceImpl;
 import moe.dazecake.inquisition.service.impl.LogServiceImpl;
 import moe.dazecake.inquisition.service.impl.MessageServiceImpl;
 import moe.dazecake.inquisition.service.impl.TaskServiceImpl;
@@ -18,12 +17,9 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.scheduling.support.CronTrigger;
 
 import javax.annotation.Resource;
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 
 @Slf4j
@@ -49,9 +45,6 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
     @Resource
     TaskServiceImpl taskService;
 
-    @Resource
-    ChinacServiceImpl chinacService;
-
     @Value("${spring.mail.to:}")
     String to;
 
@@ -60,12 +53,6 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
 
     @Value("${wx-pusher.enable:false}")
     boolean enableWxPusher;
-
-    @Value("${inquisition.chinac.enableAutoDeviceManage:false}")
-    boolean enableAutoDeviceManage;
-
-    @Value("${inquisition.chinac.maxPlayerInDevice:25}")
-    Integer maxPlayerInDevice;
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
@@ -227,78 +214,6 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                     );
                 },
                 triggerContext -> new CronTrigger("0 0 0 * * ?").nextExecutionTime(triggerContext)
-        );
-        //动态设备管理
-        taskRegistrar.addTriggerTask(
-                () -> {
-                    if (!enableAutoDeviceManage) {
-                        return;
-                    }
-                    log.info("【审判庭】 动态设备增加");
-                    var payedUserList = accountMapper.selectList(Wrappers.<AccountEntity>lambdaQuery()
-                            .ge(AccountEntity::getExpireTime, LocalDateTime.now())
-                            .eq(AccountEntity::getDelete, 0));
-                    var deviceList = deviceMapper.selectList(Wrappers.<DeviceEntity>lambdaQuery()
-                            .eq(DeviceEntity::getDelete, 0));
-                    if (deviceList.size() < payedUserList.size() / maxPlayerInDevice) {
-                        var newDevice = chinacService.createDevice(
-                                "cn-jsha-cloudphone-3",
-                                "805321",
-                                "PREPAID",
-                                0,
-                                1,
-                                null, null, null);
-                        if (newDevice == null) {
-                            messageService.pushAdmin("[审判庭] 设备增加失败提醒", "设备增加失败，请检查平台余额是否充足");
-                            return;
-                        }
-                        SimpleDateFormat format = new SimpleDateFormat("MM_dd");
-                        String time = format.format(new Date().getTime());
-                        deviceMapper.insert(new DeviceEntity()
-                                .setDeviceName("审判庭_" + time)
-                                .setRegion("")
-                                .setDeviceToken(newDevice.get(0))
-                                .setDelete(0)
-                        );
-                        String text = "激活用户数量: " + payedUserList.size() + "\n" +
-                                "设备数量: " + deviceList.size() + "\n" +
-                                "已为您自动增添新设备，请留意扣费信息";
-                        messageService.pushAdmin("[审判庭] 设备增加提醒", text);
-                    }
-                    log.info("【审判庭】 设备自动续费");
-
-                    //检测多余设备跳过续费 最多允许冗余设备数量: 2
-                    var overNum = (payedUserList.size() - deviceList.size() * maxPlayerInDevice) / maxPlayerInDevice;
-                    //过滤手动添加设备
-                    deviceList.removeIf(device -> device.getChinac() != 1);
-                    if (overNum > 2) {
-                        for (int i = 0; i < overNum; i++) {
-                            Iterator<DeviceEntity> iterator = deviceList.iterator();
-                            var flagDevice = iterator.next();
-                            while (iterator.hasNext()) {
-                                var device = iterator.next();
-                                if (flagDevice.getExpireTime().isBefore(device.getExpireTime())) {
-                                    flagDevice = device;
-                                }
-                            }
-                            deviceList.remove(flagDevice);
-                        }
-                    }
-                    for (DeviceEntity device : deviceList) {
-                        if (device.getExpireTime().isBefore(LocalDateTime.now().plusDays(7)) && device.getChinac() == 1) {
-                            if (chinacService.renewDevice(device.getRegion(), device.getDeviceToken(), 1)) {
-                                String text = "续费设备: " + device.getDeviceName() + "\n" +
-                                        "已为您自动续费，请留意扣费信息";
-                                messageService.pushAdmin("[审判庭] 设备续费提醒", text);
-                            } else {
-                                String text = "自动续费失败，请检查平台余额是否充足";
-                                messageService.pushAdmin("[审判庭] 设备续费失败提醒", text);
-                            }
-                            break;
-                        }
-                    }
-                },
-                triggerContext -> new CronTrigger("0 0 20 * * ?").nextExecutionTime(triggerContext)
         );
         //异常账号检测
         taskRegistrar.addTriggerTask(

@@ -6,6 +6,11 @@ build/
 !**/src/test/**/build/
 /src/main/resources/application-dev.yml
 
+# 环境变量配置（含敏感凭据，禁止提交）
+.env
+.env.*
+!.env.example
+
 ### STS ###
 .apt_generated
 .classpath

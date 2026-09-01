@@ -12,6 +12,7 @@ import moe.dazecake.inquisition.model.vo.account.AccountWithSanVO;
 import moe.dazecake.inquisition.model.vo.query.PageQueryVO;
 import moe.dazecake.inquisition.service.intf.AccountService;
 import moe.dazecake.inquisition.utils.DynamicInfo;
+import moe.dazecake.inquisition.utils.Encoder;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
@@ -39,7 +40,8 @@ public class AccountServiceImpl implements AccountService {
         var accountEntity = new AccountEntity();
         accountEntity.setName(addAccountDTO.getName())
                 .setAccount(addAccountDTO.getAccount())
-                .setPassword(addAccountDTO.getPassword())
+                // C2 修复：密码 AES 加密存储
+                .setPassword(Encoder.encrypt(addAccountDTO.getPassword()))
                 .setServer(addAccountDTO.getServer())
                 .setExpireTime(addAccountDTO.getExpireTime());
         if (addAccountDTO.getAgent() != null) {
@@ -66,7 +68,8 @@ public class AccountServiceImpl implements AccountService {
                     account.setName(accountJson.get("username" + i));
                     account.setAccount(accountJson.get("username" + i));
                 }
-                account.setPassword(accountJson.get("password" + i));
+                // C2 修复：密码 AES 加密存储
+                account.setPassword(Encoder.encrypt(accountJson.get("password" + i)));
                 if (accountJson.containsKey("server" + i)) {
                     account.setServer(Long.valueOf(accountJson.get("server" + i)));
                 } else {
@@ -96,7 +99,13 @@ public class AccountServiceImpl implements AccountService {
         var account = accountMapper.selectById(accountDTO.getId());
 
         if (account != null) {
-            accountMapper.updateById(AccountConvert.INSTANCE.toAccountEntity(accountDTO));
+            var newAccount = AccountConvert.INSTANCE.toAccountEntity(accountDTO);
+            // C2 修复：若新密码不为空则 AES 加密存储
+            if (newAccount.getPassword() != null && !newAccount.getPassword().isEmpty()) {
+                account.setPassword(Encoder.encrypt(newAccount.getPassword()));
+            }
+            account.setName(newAccount.getName());
+            accountMapper.updateById(account);
         }
     }
 
