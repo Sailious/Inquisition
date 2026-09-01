@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.extern.slf4j.Slf4j;
 import moe.dazecake.inquisition.mapper.AccountMapper;
 import moe.dazecake.inquisition.mapper.DeviceMapper;
+import moe.dazecake.inquisition.mapper.LogMapper;
 import moe.dazecake.inquisition.model.entity.AccountEntity;
 import moe.dazecake.inquisition.model.entity.DeviceEntity;
+import moe.dazecake.inquisition.model.entity.LogEntity;
 import moe.dazecake.inquisition.service.impl.LogServiceImpl;
 import moe.dazecake.inquisition.service.impl.MessageServiceImpl;
 import moe.dazecake.inquisition.service.impl.TaskServiceImpl;
@@ -37,6 +39,9 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
     DeviceMapper deviceMapper;
 
     @Resource
+    LogMapper logMapper;
+
+    @Resource
     LogServiceImpl logService;
 
     @Resource
@@ -53,6 +58,16 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
 
     @Value("${wx-pusher.enable:false}")
     boolean enableWxPusher;
+
+    // 日志定时清理配置
+    @Value("${inquisition.log.clean.enabled:true}")
+    boolean logCleanEnabled;
+
+    @Value("${inquisition.log.clean.retention-days:30}")
+    int logRetentionDays;
+
+    @Value("${inquisition.log.clean.cron:0 0 3 * * ?}")
+    String logCleanCron;
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
@@ -235,6 +250,26 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                     log.info("【异常账号检测】 已完成所有异常账号自动检修");
                 },
                 triggerContext -> new CronTrigger("0 0 4 * * ?").nextExecutionTime(triggerContext)
+        );
+        //日志定时清理
+        taskRegistrar.addTriggerTask(
+                () -> {
+                    if (logCleanEnabled) {
+                        try {
+                            if (logRetentionDays < 0) {
+                                log.warn("【日志清理】 retention-days 配置非法: {}，已忽略本次清理", logRetentionDays);
+                                return;
+                            }
+                            LocalDateTime cutoff = LocalDateTime.now().minusDays(logRetentionDays);
+                            int deleted = logMapper.delete(Wrappers.<LogEntity>lambdaQuery()
+                                    .lt(LogEntity::getTime, cutoff));
+                            log.info("【日志清理】 已清理 {} 条早于 {} 的日志", deleted, cutoff);
+                        } catch (Exception e) {
+                            log.error("【日志清理】 执行失败: {}", e.getMessage());
+                        }
+                    }
+                },
+                triggerContext -> new CronTrigger(logCleanCron).nextExecutionTime(triggerContext)
         );
     }
 }
