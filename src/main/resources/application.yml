@@ -95,3 +95,21 @@ inquisition:
     init-username: ${INQUISITION_ADMIN_INIT_USERNAME:root}
     # 密码：配置后不会输出到日志；留空则随机生成并打印到日志
     init-password: ${INQUISITION_ADMIN_INIT_PASSWORD:}
+  # 日志定时清理配置
+  log:
+    clean:
+      # 是否启用日志定时清理
+      # 该操作为不可逆的物理删除，默认关闭，需确认留存合规要求后显式开启
+      enabled: ${INQUISITION_LOG_CLEAN_ENABLED:false}
+      # 日志保留天数，必须大于 0，早于该天数的日志将被物理删除
+      # 配置为 0 或负数时清理任务跳过执行，避免误删整表
+      retention-days: ${INQUISITION_LOG_RETENTION_DAYS:30}
+      # 清理执行周期（cron 表达式），默认每天凌晨 3 点
+      # 留空或非法时回退为默认值并记录警告
+      cron: ${INQUISITION_LOG_CLEAN_CRON:0 0 3 * * ?}
+      # 单批删除条数，分批执行以避免长事务锁表
+      batch-size: ${INQUISITION_LOG_CLEAN_BATCH_SIZE:1000}
+      # 单轮最多执行的批次数，剩余部分留待下一轮
+      # 避免长时间独占调度线程而阻塞其它高频定时任务
+      max-batches: ${INQUISITION_LOG_CLEAN_MAX_BATCHES:20}
+
