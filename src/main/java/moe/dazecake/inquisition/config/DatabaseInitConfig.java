@@ -48,6 +48,11 @@ public class DatabaseInitConfig {
             Connection connection = DriverManager.getConnection(url02, username, password);
             Statement statement = connection.createStatement();
 
+            // 校验数据库名仅包含安全字符，防止 SQL 注入
+            if (!datasourceName.matches("[A-Za-z0-9_]+")) {
+                throw new IllegalArgumentException("非法数据库名: " + datasourceName);
+            }
+
             // 创建数据库
             statement.executeUpdate("create database if not exists `" + datasourceName + "` default character set " +
                     "utf8mb4 COLLATE utf8mb4_0900_ai_ci");
