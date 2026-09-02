@@ -25,7 +25,7 @@ dependencies {
     implementation 'org.springframework.security:spring-security-crypto:5.7.3'
     testImplementation 'junit:junit:4.13.1'
     compileOnly 'org.projectlombok:lombok:1.18.24'
-    developmentOnly 'org.springframework.boot:spring-boot-devtools:2.7.0'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools:4.0.6'
     runtimeOnly 'mysql:mysql-connector-java:8.0.29'
     annotationProcessor 'org.projectlombok:lombok:1.18.24'
     testImplementation 'org.springframework.boot:spring-boot-starter-test:2.7.0'
