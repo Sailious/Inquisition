@@ -42,8 +42,10 @@ public class AdminServiceImpl implements AdminService {
                         .eq(AdminEntity::getUsername, loginAdminDTO.getUsername()));
 
         if (admin != null && verifyPassword(loginAdminDTO.getPassword(), admin.getPassword())) {
-            // 旧版 MD5 哈希登录成功时，自动升级为 BCrypt
-            if (!isBcrypt(admin.getPassword())) {
+            // 旧版 MD5 哈希登录成功时，自动升级为 BCrypt。
+            // 若密码超过 BCrypt 最大 72 字节（CVE-2025-22228 缓解），跳过升级保留 MD5，
+            // 避免 Encoder.BCrypt() 抛出异常导致登录流程中断。
+            if (!isBcrypt(admin.getPassword()) && Encoder.isBcryptPasswordValid(loginAdminDTO.getPassword())) {
                 admin.setPassword(Encoder.BCrypt(loginAdminDTO.getPassword()));
                 adminMapper.updateById(admin);
                 log.info("管理员 {} 的密码已自动升级为 BCrypt", admin.getUsername());
@@ -78,6 +80,11 @@ public class AdminServiceImpl implements AdminService {
         if (changeAdminPasswordDTO.getUsername() == null || changeAdminPasswordDTO.getOldPassword() == null
                 || changeAdminPasswordDTO.getNewPassword() == null) {
             return Result.paramError("用户名或密码为空");
+        }
+
+        // CVE-2025-22228 缓解：BCrypt 仅处理前 72 字节，超长密码会被截断比较
+        if (!Encoder.isBcryptPasswordValid(changeAdminPasswordDTO.getNewPassword())) {
+            return Result.paramError("新密码不能超过 " + Encoder.BCRYPT_MAX_PASSWORD_BYTES + " 字节");
         }
 
         var admin = adminMapper.selectOne(

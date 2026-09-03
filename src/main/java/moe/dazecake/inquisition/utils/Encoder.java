@@ -20,6 +20,13 @@ import java.security.SecureRandom;
  */
 public class Encoder {
 
+    /**
+     * BCrypt 算法最大有效密码长度（字节）。
+     * <p>CVE-2025-22228 缓解：BCrypt 仅使用前 72 字节，超过该长度的部分被忽略，
+     * 导致仅前 72 字节一致的超长密码可被错误接受。应用层强制限制密码≤72 字节可消除该漏洞。
+     */
+    public static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
+
     private static final BCryptPasswordEncoder BCRYPT_ENCODER = new BCryptPasswordEncoder(10);
     private static final String AES_ALGORITHM = "AES/CBC/PKCS5Padding";
     private static final String AES_KEY_ALGORITHM = "AES";
@@ -40,22 +47,54 @@ public class Encoder {
 
     /**
      * 使用 BCrypt 哈希密码（推荐用于管理员/代理密码存储）。
+     *
+     * @throws IllegalArgumentException 当密码超过 {@link #BCRYPT_MAX_PASSWORD_BYTES} 字节时抛出，
+     *         以阻止绕过 CVE-2025-22228 的超长密码入库
      */
     public static String BCrypt(String plain) {
         if (plain == null) {
             throw new IllegalArgumentException("plain must not be null");
         }
+        requireBcryptPasswordValid(plain);
         return BCRYPT_ENCODER.encode(plain);
     }
 
     /**
      * 校验 BCrypt 密码。
+     *
+     * <p>若输入密码超过 {@link #BCRYPT_MAX_PASSWORD_BYTES} 字节，直接返回 false。
+     * 原因：BCrypt 只处理前 72 字节，超长密码会被截断比较产生误判（CVE-2025-22228）。
+     * 返回 false 可让调用方回退到 MD5 等旧算法校验。
      */
     public static boolean BCryptMatches(String plain, String hashed) {
         if (plain == null || hashed == null) {
             return false;
         }
+        if (plain.getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_PASSWORD_BYTES) {
+            return false;
+        }
         return BCRYPT_ENCODER.matches(plain, hashed);
+    }
+
+    /**
+     * 判断密码是否可安全用于 BCrypt（不超过 72 字节）。
+     */
+    public static boolean isBcryptPasswordValid(String plain) {
+        return plain != null
+                && plain.getBytes(StandardCharsets.UTF_8).length <= BCRYPT_MAX_PASSWORD_BYTES;
+    }
+
+    /**
+     * 强制校验密码长度可用于 BCrypt。
+     *
+     * @throws IllegalArgumentException 密码超过 {@link #BCRYPT_MAX_PASSWORD_BYTES} 字节时抛出
+     */
+    private static void requireBcryptPasswordValid(String plain) {
+        if (!isBcryptPasswordValid(plain)) {
+            throw new IllegalArgumentException(
+                    "密码不能超过 " + BCRYPT_MAX_PASSWORD_BYTES + " 字节（当前 "
+                            + plain.getBytes(StandardCharsets.UTF_8).length + " 字节）");
+        }
     }
 
     /**

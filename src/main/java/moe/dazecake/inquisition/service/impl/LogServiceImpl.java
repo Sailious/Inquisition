@@ -45,13 +45,18 @@ public class LogServiceImpl implements LogService {
         logEntity.setId(0L);
         logEntity.setTime(LocalDateTime.now());
         logEntity.setDelete(0);
+        // 安全修复：日志不落库明文密码，防止敏感信息泄露。
+        // 日志中的账号密码仅用于设备侧实时排障，入库时清除。
+        logEntity.setPassword(null);
         if (isSystem) {
             logEntity.setTaskType("SYSTEM");
             logEntity.setFrom("SYSTEM");
         } else {
             specialScan(addLogDTO);
             //去除 "hikay960q4 "
-            logEntity.setDetail(logEntity.getDetail().replace("hikay960q4 ", ""));
+            if (logEntity.getDetail() != null) {
+                logEntity.setDetail(logEntity.getDetail().replace("hikay960q4 ", ""));
+            }
         }
         // H3 修复：对日志文本做HTML转义，防止存储型XSS
         // 注意：imageUrl 不转义 —— COS 预签名URL含 & 查询参数，转义会导致签名失效、前端图片加载失败
@@ -110,7 +115,7 @@ public class LogServiceImpl implements LogService {
 
     @Override
     public void specialScan(AddLogDTO addLogDTO) {
-        if (addLogDTO.getDetail().contains("高级资深干员")) {
+        if (addLogDTO.getDetail() != null && addLogDTO.getDetail().contains("高级资深干员")) {
             try {
                 var luckyDog = accountMapper.selectOne(Wrappers.<AccountEntity>lambdaQuery()
                         .eq(AccountEntity::getAccount, addLogDTO.getAccount()));
@@ -123,13 +128,18 @@ public class LogServiceImpl implements LogService {
 
     @Override
     public void deleteLog(Long id) {
-        logMapper.updateById(logMapper.selectById(id).setDelete(1));
+        var logEntity = logMapper.selectById(id);
+        if (logEntity != null) {
+            logEntity.setDelete(1);
+            logMapper.updateById(logEntity);
+        }
     }
 
     @Override
     public PageQueryVO<LogDTO> queryAllLog(Long current, Long size) {
-        //降序分页查找
+        //降序分页查找（仅返回未删除的日志）
         var data = logMapper.selectPage(new Page<>(current, size), Wrappers.<LogEntity>lambdaQuery()
+                .eq(LogEntity::getDelete, 0)
                 .orderByDesc(LogEntity::getId));
         return getLogPageQueryVO(data);
     }
@@ -138,6 +148,7 @@ public class LogServiceImpl implements LogService {
     public PageQueryVO<LogDTO> queryLogByAccount(String account, Long current, Long size) {
         var data = logMapper.selectPage(new Page<>(current, size), Wrappers.<LogEntity>lambdaQuery()
                 .eq(LogEntity::getAccount, account)
+                .eq(LogEntity::getDelete, 0)
                 .orderByDesc(LogEntity::getId));
         return getLogPageQueryVO(data);
     }
@@ -149,7 +160,10 @@ public class LogServiceImpl implements LogService {
         result.setPage(data.getPages());
         result.setTotal(data.getTotal());
         for (LogEntity record : data.getRecords()) {
-            result.getRecords().add(LogConvert.INSTANCE.toLogDTO(record));
+            LogDTO dto = LogConvert.INSTANCE.toLogDTO(record);
+            // 安全修复：历史存量日志可能包含明文密码，响应前统一清除
+            dto.setPassword(null);
+            result.getRecords().add(dto);
         }
         return result;
     }

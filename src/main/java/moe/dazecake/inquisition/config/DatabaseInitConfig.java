@@ -40,29 +40,32 @@ public class DatabaseInitConfig {
             Class.forName(driverClassName);
 
             String url01 = datasourceUrl.substring(0, datasourceUrl.indexOf("?"));
-
             String url02 = url01.substring(0, url01.lastIndexOf("/"));
-
             String datasourceName = url01.substring(url01.lastIndexOf("/") + 1);
-            // 连接已经存在的数据库，如：mysql
-            Connection connection = DriverManager.getConnection(url02, username, password);
-            Statement statement = connection.createStatement();
 
-            // 校验数据库名仅包含安全字符，防止 SQL 注入
-            if (!datasourceName.matches("[A-Za-z0-9_]+")) {
+            // 校验数据库名合法：反引号已被用于包裹标识符，只需拦截反引号本身即可防止 SQL 逃逸。
+            // 其余合法 MySQL 标识符字符（含连字符、点号、中文等）均放行。
+            if (datasourceName.isEmpty()) {
+                throw new IllegalArgumentException("数据库名不能为空");
+            }
+            if (datasourceName.contains("`")) {
                 throw new IllegalArgumentException("非法数据库名: " + datasourceName);
             }
 
-            // 创建数据库
-            statement.executeUpdate("create database if not exists `" + datasourceName + "` default character set " +
-                    "utf8mb4 COLLATE utf8mb4_0900_ai_ci");
-            log.info("【审判庭初始化】 创建数据库成功");
-            statement.close();
-            connection.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+            // 连接已经存在的数据库（如 mysql），在其中创建目标数据库。
+            // 使用 try-with-resources 确保连接与语句被正确关闭。
+            try (Connection connection = DriverManager.getConnection(url02, username, password);
+                 Statement statement = connection.createStatement()) {
 
+                statement.executeUpdate("create database if not exists `" + datasourceName + "` default character set " +
+                        "utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+                log.info("【审判庭初始化】 创建数据库成功");
+            }
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("数据库驱动加载失败: " + driverClassName, e);
+        } catch (Exception e) {
+            throw new IllegalStateException("数据库初始化失败", e);
+        }
 
         return datasource;
     }

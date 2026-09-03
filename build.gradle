@@ -4,6 +4,8 @@ plugins {
     id 'io.spring.dependency-management' version '1.0.11.RELEASE'
 }
 
+// Spring Boot 2.7 BOM 管理 snakeyaml 1.x 线。升至 1.33 为 1.x 最新补丁，
+// CVE-2022-1471 修复版 2.0 仅 Boot 3+ 可用，受 Boot 2.7 限制无法升级。
 ext['snakeyaml.version'] = '1.33'
 
 group = 'moe.dazecake'
@@ -16,19 +18,6 @@ configurations {
     }
 }
 
-
-// 安全修复：强制升级存在已知漏洞的传递依赖
-configurations.all {
-    resolutionStrategy {
-        // fastjson <= 1.2.83 存在反序列化 RCE（CVSS 9.8），升级至安全版本
-        force 'com.alibaba:fastjson:1.2.83'
-        // BouncyCastle 1.67 存在 LDAP 注入（CVE-2023-33201）与 ASN.1 DoS（CVE-2024-29857）
-        force 'org.bouncycastle:bcprov-jdk15on:1.70'
-        // snakeyaml 1.30 存在反序列化 RCE（CVE-2022-1471），升级至安全版本
-        force 'org.yaml:snakeyaml:1.33'
-    }
-}
-
 repositories {
     mavenLocal()
     maven {url 'https://maven.aliyun.com/nexus/content/groups/public/'}
@@ -37,10 +26,15 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-websocket:2.7.0'
-    implementation 'org.springframework.security:spring-security-crypto:6.4.4'
+    // Spring Security Crypto：Boot 2.7 兼容线为 5.7.3。
+    // CVE-2025-22228 的 5.7 线开源修复版不可得（仅企业支持），6.4.4 需 Java 17。
+    // 保持 5.7.3 并在应用层增加密码≤72字节约束缓解（见 Encoder.java）。
+    implementation 'org.springframework.security:spring-security-crypto:5.7.3'
     testImplementation 'junit:junit:4.13.1'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine'
     compileOnly 'org.projectlombok:lombok:1.18.24'
-    developmentOnly 'org.springframework.boot:spring-boot-devtools:4.0.6'
+    // devtools 必须与 Boot 主版本保持一致（2.7.0），跨大版本混用会导致运行时类不兼容
+    developmentOnly 'org.springframework.boot:spring-boot-devtools:2.7.0'
     runtimeOnly 'mysql:mysql-connector-java:8.0.29'
     annotationProcessor 'org.projectlombok:lombok:1.18.24'
     testImplementation 'org.springframework.boot:spring-boot-starter-test:2.7.0'
@@ -54,10 +48,29 @@ dependencies {
     implementation 'com.alibaba:druid-spring-boot-starter:1.2.11'
     implementation 'com.zjiecode:wxpusher-java-sdk:2.1.4'
     implementation 'com.squareup.okhttp3:okhttp:4.10.0'
-    implementation 'com.qcloud:cos_api:5.6.105'
+    // cos_api 传递引入 bcprov-jdk15on:1.67，该坐标已停止维护（1.72 起更名 bcprov-jdk18on），
+    // 排除旧坐标并显式引入新坐标 1.78，修复 CVE-2023-33201 与 CVE-2024-29857。
+    implementation('com.qcloud:cos_api:5.6.105') {
+        exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+    }
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
     implementation 'org.mapstruct:mapstruct:1.5.3.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.3.Final'
 }
+
+// 传递依赖安全治理
+configurations.all {
+    resolutionStrategy {
+        // wxpusher-java-sdk 引入 fastjson 1.2.70。1.2.83 已是该坐标最终版本，
+        // 修复已知反序列化 RCE（CVSS 9.8）。根治需上游切换到 fastjson2。
+        force 'com.alibaba:fastjson:1.2.83'
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+
 // 配置打包时的资源处理
 bootJar {
     // 排除内部的application.yml，这样外部的配置文件会被优先使用

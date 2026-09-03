@@ -93,6 +93,10 @@ public class ProUserServiceImpl implements ProUserService {
 
     @Override
     public Result<String> updateProUser(ProUserDTO proUserDTO) {
+        // CVE-2025-22228 缓解：BCrypt 仅处理前 72 字节
+        if (proUserDTO.getPassword() != null && !Encoder.isBcryptPasswordValid(proUserDTO.getPassword())) {
+            return Result.paramError("密码不能超过 " + Encoder.BCRYPT_MAX_PASSWORD_BYTES + " 字节");
+        }
         var proUserEntity = ProUserConvert.INSTANCE.toProUserEntity(proUserDTO);
         proUserEntity.setPassword(Encoder.BCrypt(proUserEntity.getPassword()));
         proUserMapper.updateById(proUserEntity);
@@ -110,8 +114,9 @@ public class ProUserServiceImpl implements ProUserService {
                         .eq(ProUserEntity::getUsername, proUserLoginDTO.getUsername())
         );
         if (account != null && verifyPassword(proUserLoginDTO.getPassword(), account.getPassword())) {
-            // 旧版 MD5 哈希登录成功时，自动升级为 BCrypt
-            if (!isBcrypt(account.getPassword())) {
+            // 旧版 MD5 哈希登录成功时，自动升级为 BCrypt。
+            // 若密码超过 BCrypt 最大 72 字节（CVE-2025-22228 缓解），跳过升级保留 MD5。
+            if (!isBcrypt(account.getPassword()) && Encoder.isBcryptPasswordValid(proUserLoginDTO.getPassword())) {
                 account.setPassword(Encoder.BCrypt(proUserLoginDTO.getPassword()));
                 proUserMapper.updateById(account);
                 log.info("代理商 {} 的密码已自动升级为 BCrypt", account.getUsername());
@@ -153,6 +158,11 @@ public class ProUserServiceImpl implements ProUserService {
 
     @Override
     public Result<String> updateProUserPassword(Long id, UpdateProUserPasswordDTO updateProUserPasswordDTO) {
+        // CVE-2025-22228 缓解：BCrypt 仅处理前 72 字节
+        if (updateProUserPasswordDTO.getNewPassword() == null
+                || !Encoder.isBcryptPasswordValid(updateProUserPasswordDTO.getNewPassword())) {
+            return Result.paramError("新密码不能超过 " + Encoder.BCRYPT_MAX_PASSWORD_BYTES + " 字节");
+        }
         var old = proUserMapper.selectById(id);
 
         if (verifyPassword(updateProUserPasswordDTO.getOldPassword(), old.getPassword())) {
@@ -231,6 +241,7 @@ public class ProUserServiceImpl implements ProUserService {
                 new Page<>(current, size),
                 Wrappers.<LogEntity>lambdaQuery()
                         .eq(LogEntity::getAccount, subUser.getAccount())
+                        .eq(LogEntity::getDelete, 0)
                         .orderByDesc(LogEntity::getId)
         );
         return Result.success(logService.getLogPageQueryVO(data), "查询成功");
