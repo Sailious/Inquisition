@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.gitee.sunchenbin.mybatis.actable.annotation.Column;
+import com.gitee.sunchenbin.mybatis.actable.annotation.Index;
 import com.gitee.sunchenbin.mybatis.actable.annotation.IsAutoIncrement;
 import com.gitee.sunchenbin.mybatis.actable.annotation.IsKey;
 import com.gitee.sunchenbin.mybatis.actable.annotation.IsNotNull;
@@ -74,6 +75,10 @@ public class LogEntity {
     @Schema(description = "密码")
     String password;
 
+    // 日志定时清理按时间范围删除，无索引会导致全表扫描与长事务。
+    // 索引名由 actable 生成为 actable_idx_time；
+    // 存量库请先在低峰期手工创建同名索引（见 doc/FastDeploy.md），避免应用启动时执行 DDL。
+    @Index
     @Column(name = "time", comment = "时间")
     @Schema(description = "时间")
     LocalDateTime time;
