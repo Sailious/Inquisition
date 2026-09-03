@@ -23,7 +23,7 @@ public class ImageServiceImplTest {
         // 所有存储服务默认未启用时，应返回未配置提示
         assertNotNull(result);
         assertEquals("未配置任何存储服务", result.getMsg());
-        assertFalse(result.getCode() == 200);
+        assertNotEquals(200, result.getCode());
     }
 
     /**
