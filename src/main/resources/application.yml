@@ -71,6 +71,12 @@ storage:
     username: ${CHFS_USERNAME:}
     password: ${CHFS_PASSWORD:}
     uploadDir: ${CHFS_UPLOAD_DIR:/inquisition/log/img}
+  qiniu:
+    enable: ${QINIU_ENABLE:false}
+    accessKey: ${QINIU_ACCESS_KEY:}
+    secretKey: ${QINIU_SECRET_KEY:}
+    bucket: ${QINIU_BUCKET:}
+    domain: ${QINIU_DOMAIN:}
 
 inquisition:
   # JWT密钥：必须配置不少于32字符的随机字符串，否则启动时将拒绝启动
