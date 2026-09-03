@@ -1,5 +1,7 @@
 package moe.dazecake.inquisition;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import moe.dazecake.inquisition.service.impl.EmailServiceImpl;
 import moe.dazecake.inquisition.service.impl.QmsgServiceImpl;
 import okhttp3.Call;
@@ -7,8 +9,10 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.Buffer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +39,7 @@ import static org.mockito.Mockito.when;
  * 通过 Mockito 校验 service 是否正确组装消息并调用底层客户端。
  */
 @ExtendWith(MockitoExtension.class)
-class InquisitionApplicationTests {
+class NotificationServiceTest {
 
     @Mock
     private JavaMailSender mailSender;
@@ -49,6 +53,8 @@ class InquisitionApplicationTests {
     private EmailServiceImpl emailService;
 
     private QmsgServiceImpl qmsgService;
+
+    private final Gson gson = new Gson();
 
     @BeforeEach
     void setUp() throws Exception {
@@ -72,6 +78,15 @@ class InquisitionApplicationTests {
         field.set(target, value);
     }
 
+    /**
+     * 从 RequestBody 读取字符串内容。
+     */
+    private static String bodyToString(RequestBody requestBody) throws Exception {
+        Buffer buffer = new Buffer();
+        requestBody.writeTo(buffer);
+        return buffer.readUtf8();
+    }
+
     @Test
     @DisplayName("sendSimpleMail 应构建正确消息并交给 JavaMailSender 发送")
     void sendSimpleMail_ShouldBuildAndSendMessage() {
@@ -88,8 +103,8 @@ class InquisitionApplicationTests {
     }
 
     @Test
-    @DisplayName("Qmsg 启用且配置 key 时应构建正确请求")
-    void qmsgPush_WhenEnabled_ShouldSendRequest() throws Exception {
+    @DisplayName("Qmsg 启用且配置 key 时应构建正确请求体并发送")
+    void qmsgPush_WhenEnabled_ShouldSendRequestWithCorrectBody() throws Exception {
         // 构造真实 Response，避免 mock final 类 okhttp3.Response
         Request dummy = new Request.Builder()
                 .url("https://dummy.example.com")
@@ -114,8 +129,22 @@ class InquisitionApplicationTests {
         ArgumentCaptor<Request> requestCaptor = ArgumentCaptor.forClass(Request.class);
         verify(okHttpClient, times(1)).newCall(requestCaptor.capture());
 
-        String url = requestCaptor.getValue().url().toString();
+        Request actualRequest = requestCaptor.getValue();
+
+        // 断言 URL
+        String url = actualRequest.url().toString();
         assertEquals("https://qmsg.zendee.cn/jsend/test-qmsg-key", url);
+
+        // 断言请求体：{ "msg": "...", "qq": "..." }
+        RequestBody requestBody = actualRequest.body();
+        assertEquals(QmsgServiceImpl.JSON, requestBody.contentType());
+
+        String bodyContent = bodyToString(requestBody);
+        JsonObject json = gson.fromJson(bodyContent, JsonObject.class);
+        assertEquals("【测试消息】", json.get("msg").getAsString());
+        assertEquals("1097561282", json.get("qq").getAsString());
+
+        // 断言网络调用
         verify(call, times(1)).execute();
     }
 
@@ -133,6 +162,16 @@ class InquisitionApplicationTests {
     @DisplayName("Qmsg 未配置 key 时不应发起网络请求")
     void qmsgPush_WhenKeyEmpty_ShouldSkipRequest() throws Exception {
         setField(qmsgService, "qmsgKey", "");
+
+        qmsgService.push("1097561282", "test");
+
+        verify(okHttpClient, never()).newCall(any(Request.class));
+    }
+
+    @Test
+    @DisplayName("Qmsg key 为 null 时不应发起网络请求")
+    void qmsgPush_WhenKeyNull_ShouldSkipRequest() throws Exception {
+        setField(qmsgService, "qmsgKey", null);
 
         qmsgService.push("1097561282", "test");
 
