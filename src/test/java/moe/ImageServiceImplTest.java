@@ -1,39 +1,40 @@
 package moe;
 
+import moe.dazecake.inquisition.constant.ResponseCodeConstants;
 import moe.dazecake.inquisition.service.impl.ImageServiceImpl;
 import moe.dazecake.inquisition.utils.Result;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * ImageServiceImpl 的纯单元测试。
+ *
+ * <p>所有存储开关默认关闭（通过 new 直接实例化，无 Spring 注入），
+ * 因此 uploadImage 应返回 failed("未配置任何存储服务")，
+ * 不触发任何真实 I/O。
+ */
 public class ImageServiceImplTest {
 
-    /**
-     * 测试带 Data URI 前缀的 base64 图片内容在未配置任何存储服务时
-     * 能正确进入主流程并返回合理的错误提示。
-     */
     @Test
-    public void testUploadImageWithoutStorage() {
+    public void testUploadImageWhenNoStorageConfigured() {
         ImageServiceImpl imageService = new ImageServiceImpl();
-        Result<String> result = imageService.uploadImage(
-                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-        );
-        // 所有存储服务默认未启用时，应返回未配置提示
-        assertNotNull(result);
+
+        Result<String> result = imageService.uploadImage("data:image/png;base64,aW1hZ2VkYXRh");
+
+        assertEquals(ResponseCodeConstants.FAIL, result.getCode());
         assertEquals("未配置任何存储服务", result.getMsg());
-        assertNotEquals(200, result.getCode());
     }
 
-    /**
-     * 测试空图片返回失败。
-     */
     @Test
-    public void testUploadEmptyImage() {
+    public void testUploadImageWhenBase64Empty() {
         ImageServiceImpl imageService = new ImageServiceImpl();
+
         Result<String> result = imageService.uploadImage("");
-        assertNotNull(result);
+
+        assertEquals(ResponseCodeConstants.FAIL, result.getCode());
         assertEquals("图片内容为空", result.getMsg());
     }
 

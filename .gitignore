@@ -45,3 +45,6 @@ out/
 application-dev.yml
 config/
 application-fixed.yml
+
+# IDE/工具会话数据（不入库）
+.codebuddy/
