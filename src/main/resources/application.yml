@@ -112,4 +112,3 @@ inquisition:
       # 单轮最多执行的批次数，剩余部分留待下一轮
       # 避免长时间独占调度线程而阻塞其它高频定时任务
       max-batches: ${INQUISITION_LOG_CLEAN_MAX_BATCHES:20}
-
