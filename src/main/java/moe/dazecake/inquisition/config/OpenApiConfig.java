@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import org.springframework.context.annotation.Configuration;
 
-@OpenAPIDefinition(info = @Info(title = "Inquisition", description = "审判庭 明日方舟速通云控后端", license = @License(name = "GPL-3.0", url = "https://github.com/AegirTech/Inquisition/blob/main/LICENSE"), version = "1.0"), security = @SecurityRequirement(name = "JWT"))
+@OpenAPIDefinition(info = @Info(title = "Inquisition", description = "审判庭 明日方舟速通云控后端", license = @License(name = "GPL-3.0", url = "https://github.com/AegirTech/Inquisition/blob/main/LICENSE"), version = "2.1.1"), security = @SecurityRequirement(name = "JWT"))
 @SecurityScheme(name = "JWT", type = SecuritySchemeType.HTTP, bearerFormat = "JWT", scheme = "bearer", in = SecuritySchemeIn.HEADER)
 @Configuration
 public class OpenApiConfig {
