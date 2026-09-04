@@ -38,7 +38,8 @@ Inquisition 可以轻松管理数百个账号与设备。
 - 配置文件：
   - `.cnb/settings.yml` — NPC 角色人设、按钮与默认角色
   - `.cnb.yml` — 触发事件流水线（Issue/PR 评论触发）
-- 助手使用 CNB 官方默认 NPC 镜像（`cnbcool/default-npc:latest`）运行，与项目自身的 `Dockerfile`（Java 部署镜像）互不影响。
+  - `.cnb/npc/Dockerfile` — 工程师 NPC 运行环境镜像（Java 11 / Gradle 工具链）
+- 工程师 NPC（后端/数据层/测试/任务调度/PR 审查）运行在仓库自建环境镜像（tag：`npc-java`）中，可直接在本仓执行 `./gradlew` 编译与测试；`.cnb/npc/**` 变更推送 `main` 后由 `.cnb.yml` 的 `npc-runtime-image` 流水线自动重建镜像。与项目自身的 `Dockerfile`（Java 部署镜像）互不影响。
 
 ## NPC 制造工具
 

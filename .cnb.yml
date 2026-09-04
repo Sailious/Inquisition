@@ -1,11 +1,29 @@
 # NPC 流水线：Issue/PR 评论 @ 助手时触发
-# 使用 CNB 官方默认 NPC 镜像，无需构建自定义镜像，不影响项目自身的 Java Dockerfile
+# 工程师 NPC 运行环境使用仓库自建镜像（含 Java 11 / Gradle 工具链，Dockerfile 见 .cnb/npc/Dockerfile），
+# 镜像由 main.push 事件下的 npc-runtime-image 流水线自动构建并推送（tag: npc-java），
+# 与项目自身的 Java 部署 Dockerfile 互不影响。
 .npc_task: &npc_task
   - docker:
-      image: cnbcool/default-npc:latest
+      # CNB_NPC_SLUG_LOWERCASE：NPC 所属仓库（sailwertech/inquisition）的小写 slug
+      image: ${CNB_DOCKER_REGISTRY}/${CNB_NPC_SLUG_LOWERCASE}:npc-java
     stages:
       - name: npc go
         type: npc:go
+
+# NPC 运行环境镜像构建：.cnb/npc/** 变更推送 main 时自动重建并推送
+main:
+  push:
+    npc-runtime-image:
+      name: build-npc-runtime-image
+      services:
+        - docker
+      ifModify:
+        - .cnb/npc/**
+      stages:
+        - name: docker build
+          script: docker build -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java -f .cnb/npc/Dockerfile .
+        - name: docker push
+          script: docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
 
 $:
   issue.comment@npc: *npc_task
