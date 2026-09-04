@@ -54,6 +54,7 @@ dependencies {
         exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
     }
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
+    implementation 'com.qiniu:qiniu-java-sdk:7.19.0'
     implementation 'org.mapstruct:mapstruct:1.5.3.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.3.Final'
 }
