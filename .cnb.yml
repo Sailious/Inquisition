@@ -1,7 +1,22 @@
-# NPC 流水线：Issue/PR 评论 @ 助手时触发
+# NPC 流水线：Issue 自动派单 → 集成分支协同开发 → 审查前置 → 出 PR → 双人同意合并
+#
 # 工程师 NPC 运行环境使用仓库自建镜像（含 Java 11 / Gradle 工具链，Dockerfile 见 .cnb/npc/Dockerfile），
 # 镜像由 main.push 事件下的 npc-runtime-image 流水线自动构建并推送（tag: npc-java），
 # 与项目自身的 Java 部署 Dockerfile 互不影响。
+#
+# 协作模型（与 .cnb/settings.yml v4.0 配套）：
+#   1. issue.open / issue.reopen 自动召唤「任务调度工程师」拆单并指定集成分支 dev/issue-{N}
+#   2. 被点名的工程师在同一条集成分支开发，完工后在 Issue 评论 @ 调度师回报
+#      （NPC 互相 @ 由 issue.comment@npc 承接，本文件无需额外编排）
+#   3. 调度师确认全部完成后 @ 「PR 审查工程师」，后者 fetch 集成分支审查（此时尚无 PR），
+#      结论以 Issue 标签 npc-review-passed 固化
+#   4. 审查通过后由「PR 提交工程师」创建 PR（dev/issue-{N} → main）
+#   5. pull_request / pull_request.mergeable 校验标签，人工 approve 后 squash 合并
+#   6. dev/** 有新推送即清除审查结论，防止旧结论给新代码放行
+#
+# 镜像地址说明：NPC 事件下用 CNB_NPC_SLUG_LOWERCASE，非 NPC 事件（push/pull_request）下
+# 该变量为空，统一改用 CNB_REPO_SLUG_LOWERCASE（NPC 属于本仓库，两者等价）。
+
 .npc_task: &npc_task
   - docker:
       # CNB_NPC_SLUG_LOWERCASE：NPC 所属仓库（sailwertech/inquisition）的小写 slug
@@ -10,7 +25,56 @@
       - name: npc go
         type: npc:go
 
-# NPC 运行环境镜像构建：.cnb/npc/** 变更推送 main 时自动重建并推送
+# Issue 派单：新建/重开时自动召唤调度师（Issue 事件必须挂在 $ 兜底分支下）
+.dispatch: &dispatch
+  - docker:
+      image: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
+    stages:
+      - name: npc go
+        type: npc:go
+        options:
+          role: 任务调度工程师
+          userPrompt: |
+            本 Issue 刚刚创建（或重开），请按你的职责拆解需求并派单。硬性约束：
+            1) 建立并指定集成分支 dev/issue-{N}（N 为本 Issue 编号），要求所有工程师在该分支开发，
+               分支不存在则基于 main 创建并推送。分支名不得自定义。
+            2) 按需选择性派单——只 @ 本任务真正需要的角色，不要每次把三位工程师全 @ 一遍。
+            3) 严禁在子任务未全部回报完成前 @「PR 审查工程师」；也严禁 @「PR 提交工程师」。
+            4) 若本 Issue 信息不足以拆解，直接列出缺口并说明需要补充什么，不要臆测。
+
+# 门禁校验：PR 源分支符合 dev/issue-{N}，且对应 Issue 带 npc-review-passed
+.check_review: &check_review
+  name: check npc review passed
+  script: |
+    set -e
+    echo "校验 PR #$CNB_PULL_REQUEST_IID 的源分支与审查结论..."
+
+    PR_INFO=$(cnb pulls get-pull --repo "$CNB_REPO_SLUG" --number "$CNB_PULL_REQUEST_IID" 2>/dev/null || true)
+    if [ -z "$PR_INFO" ]; then
+      echo "无法获取 PR #$CNB_PULL_REQUEST_IID 信息，为安全起见阻止继续"
+      exit 1
+    fi
+
+    # 从 PR 信息中定位集成分支名 dev/issue-{N}
+    HEAD_BRANCH=$(printf '%s' "$PR_INFO" | grep -oE 'dev/issue-[0-9]+' | head -1 || true)
+    if [ -z "$HEAD_BRANCH" ]; then
+      echo "PR 源分支不符合 dev/issue-{N} 约定。"
+      echo "本仓库采用集成分支模型：改动须先推到 dev/issue-{N}，由审查通过后统一出 PR。"
+      exit 1
+    fi
+
+    ISSUE_NUM=${HEAD_BRANCH#dev/issue-}
+    echo "源分支 $HEAD_BRANCH → 关联 Issue #$ISSUE_NUM"
+
+    LABELS=$(cnb issues list-issue-labels --repo "$CNB_REPO_SLUG" --number "$ISSUE_NUM" 2>/dev/null || true)
+    if ! printf '%s' "$LABELS" | grep -q 'npc-review-passed'; then
+      echo "Issue #$ISSUE_NUM 未带 npc-review-passed 标签，即尚未通过「PR 审查工程师」审查。"
+      echo "请等待审查通过后再进入合并流程（审查结论会在 push 新提交后失效，需重新审查）。"
+      exit 1
+    fi
+
+    echo "校验通过：Issue #$ISSUE_NUM 已通过审查。"
+
 main:
   push:
     npc-runtime-image:
@@ -60,6 +124,84 @@ main:
             attachments:
               - "./build/libs/*.jar"
 
+# 集成分支有新推送 → 清除该 Issue 的审查通过结论
+# 防止「审查通过后又偷推新代码」沿用旧结论绕过门禁，须重新回报并重新审查
+"dev/**":
+  push:
+    invalidate-review:
+      name: invalidate-review
+      docker:
+        image: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
+      stages:
+        - name: clear passed label
+          script: |
+            BRANCH="$CNB_BRANCH"
+            ISSUE_NUM=$(printf '%s' "$BRANCH" | sed -n 's|^dev/issue-\([0-9][0-9]*\)$|\1|p')
+            if [ -z "$ISSUE_NUM" ]; then
+              echo "分支 $BRANCH 非 dev/issue-{N} 格式，跳过"
+              exit 0
+            fi
+            cnb issues delete-issue-label --repo "$CNB_REPO_SLUG" --number "$ISSUE_NUM" --name npc-review-passed 2>/dev/null || true
+            echo "集成分支 $BRANCH 有新推送，已清除 Issue #$ISSUE_NUM 的 npc-review-passed 标签（需重新审查）"
+
 $:
-  issue.comment@npc: *npc_task
+  # Issue 评论 @NPC：调度师派单 / 工程师回报 / 审查员审查，全部走这里
+  # 审查员执行后追加标签同步：把评论末尾的判定标记固化为 Issue 标签
+  issue.comment@npc:
+    - docker:
+        image: ${CNB_DOCKER_REGISTRY}/${CNB_NPC_SLUG_LOWERCASE}:npc-java
+      stages:
+        - name: npc go
+          type: npc:go
+        - name: sync review label
+          script: |
+            # 仅「PR 审查工程师」的结论需要固化为标签，其余角色的评论不影响门禁
+            if [ "$CNB_NPC_NAME" != "PR 审查工程师" ]; then
+              echo "当前 NPC=$CNB_NPC_NAME，非审查员，跳过标签同步"
+              exit 0
+            fi
+
+            COMMENTS=$(cnb issues list-issue-comments --repo "$CNB_REPO_SLUG" --number "$CNB_ISSUE_IID" --sort "-created" --page-size 5 2>/dev/null || true)
+            # 评论按创建时间倒序返回，取第一个命中的判定标记即为最新结论
+            VERDICT=$(printf '%s' "$COMMENTS" | grep -oE 'NPC_REVIEW: (PASS|BLOCK)' | head -1 | awk '{print $2}' || true)
+
+            case "$VERDICT" in
+              PASS)
+                cnb issues post-issue-labels --repo "$CNB_REPO_SLUG" --number "$CNB_ISSUE_IID" --labels npc-review-passed
+                echo "审查通过：已为 Issue #$CNB_ISSUE_IID 打上 npc-review-passed"
+                ;;
+              BLOCK)
+                cnb issues delete-issue-label --repo "$CNB_REPO_SLUG" --number "$CNB_ISSUE_IID" --name npc-review-passed 2>/dev/null || true
+                echo "审查未通过：已移除 Issue #$CNB_ISSUE_IID 的 npc-review-passed"
+                ;;
+              *)
+                echo "未识别到判定标记（NPC_REVIEW: PASS|BLOCK），保持标签不变"
+                echo "提醒：审查员须在评论最后一行输出判定标记，否则结论无法被门禁识别"
+                ;;
+            esac
+
+  # PR 评论 @NPC（如审查员打回整改）：保持原样
   pull_request.comment@npc: *npc_task
+
+  # Issue 新建/重开 → 自动派单
+  issue.open: *dispatch
+  issue.reopen: *dispatch
+
+  # PR 创建/源分支推送：只校验不重复审查（代码已在集成分支审过）
+  pull_request:
+    - docker:
+        image: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
+      stages:
+        - *check_review
+
+  # 双人同意后合并：审查通过（Issue 标签）+ 人工 approve（本事件语义）两道齐备
+  pull_request.mergeable:
+    - docker:
+        image: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
+      stages:
+        - *check_review
+        - name: auto merge
+          type: git:auto-merge
+          options:
+            mergeType: squash
+            removeSourceBranch: false
