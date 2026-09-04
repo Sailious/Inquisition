@@ -1,0 +1,24 @@
+# CNB 页面手动触发按钮配置（代码-分支详情页展示）
+# 仅 main 分支提供「发布」按钮：点击后输入版本号，触发 .cnb.yml 中
+# main.web_trigger_release 流水线，完成打 tag -> 构建镜像 -> 创建 Release -> 上传附件。
+# 注意：本文件不支持 include/imports，须独立完整定义；仅仓库写权限用户可触发。
+branch:
+  - reg: ^main$
+    buttons:
+      - name: 发布
+        description: 打标签 ${VERSION} 并构建推送镜像、创建 Release
+        event: web_trigger_release
+        isDefault: true
+        permissions:
+          roles:
+            - owner
+            - master
+            - developer
+        inputs:
+          VERSION:
+            name: 版本号（Tag 名）
+            type: input
+            required: true
+            default: v1.0.0
+            placeholder: 如 v1.0.0
+            description: 将以此创建 git tag、Docker 镜像 tag 与 Release 名称
