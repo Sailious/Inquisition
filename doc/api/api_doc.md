@@ -1,4 +1,4 @@
-# 📋 Inquisition API 文档 | v1.3.1
+# 📋 Inquisition API 文档 | v2.1.1
 
 > 由 springdoc-openapi 运行时提取 + 按代码鉴权注解（@Login/@UserLogin/@ProUserLogin）校正生成。可直接导入 Apifox（OpenAPI 3.0）。
 
@@ -7,7 +7,7 @@
 | 属性 | 值 |
 |------|-----|
 | API 名称 | Inquisition（审判庭）|
-| 版本 | v1.3.1 |
+| 版本 | v2.1.1 |
 | Base URL | http://localhost:2000 |
 | 认证方式 | Bearer JWT，分 3 种角色 |
 | 数据格式 | JSON |
