@@ -159,12 +159,15 @@ public class ImageServiceImpl implements ImageService {
             }
             DefaultPutRet putRet = response.jsonToObject(DefaultPutRet.class);
 
-            // 返回下载地址（拼接域名 + key）
+            // 返回下载地址：先拼接域名 + key，再生成带签名的临时下载链接
+            // 空间为私有访问模式时，公开 URL 会被 CDN 鉴权拦截（403），
+            // 需生成签名 URL，有效期 30 天，与 COS 分支保持一致
             String domain = qiniuDomain.trim();
             if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
                 domain = "https://" + domain;
             }
-            String fileUrl = domain.replaceAll("/+$", "") + "/" + putRet.key;
+            String publicUrl = domain.replaceAll("/+$", "") + "/" + putRet.key;
+            String fileUrl = auth.privateDownloadUrl(publicUrl, 30L * 24 * 60 * 60);
             return Result.success(fileUrl, "上传成功");
         } catch (QiniuException e) {
             return Result.failed("七牛云上传异常: " + e.getMessage());
