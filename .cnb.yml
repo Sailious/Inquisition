@@ -1,0 +1,12 @@
+# NPC 流水线：Issue/PR 评论 @ 助手时触发
+# 使用 CNB 官方默认 NPC 镜像，无需构建自定义镜像，不影响项目自身的 Java Dockerfile
+.npc_task: &npc_task
+  - docker:
+      image: cnbcool/default-npc:latest
+    stages:
+      - name: npc go
+        type: npc:go
+
+$:
+  issue.comment@npc: *npc_task
+  pull_request.comment@npc: *npc_task
