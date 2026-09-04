@@ -25,6 +25,25 @@ main:
         - name: docker push
           script: docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
 
+    # 应用镜像构建：每次 main push 时 gradle 打包 + 构建应用 Dockerfile + 推送（commit 短号 + latest）
+    build-and-push-app-image:
+      name: build-and-push-app-image
+      docker:
+        image: ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:npc-java
+      services:
+        - docker
+      stages:
+        - name: gradle build
+          script: ./gradlew --no-daemon bootJar
+        - name: docker build
+          script: |
+            docker build -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${CNB_COMMIT_SHORT} .
+            docker tag ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${CNB_COMMIT_SHORT} ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest
+        - name: docker push
+          script: |
+            docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:${CNB_COMMIT_SHORT}
+            docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest
+
 $:
   issue.comment@npc: *npc_task
   pull_request.comment@npc: *npc_task
