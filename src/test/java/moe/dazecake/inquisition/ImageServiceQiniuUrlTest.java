@@ -14,6 +14,8 @@ import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,4 +187,127 @@ class ImageServiceQiniuUrlTest {
             assertTrue(result.getData().startsWith("https://qiniuoss.example.com/100000.png"));
         }
     }
+
+    // ---------- T-5：七牛签名 URL 有效期配置化回归测试（#32） ----------
+
+    /** 解析签名 URL 中 e= 过期时间戳（Unix 秒）。 */
+    private static long extractExpireSecs(String signedUrl) {
+        Matcher m = Pattern.compile("[?&]e=(\\d+)").matcher(signedUrl);
+        assertTrue(m.find(), "签名 URL 应含 e= 过期时间戳: " + signedUrl);
+        return Long.parseLong(m.group(1));
+    }
+
+    /**
+     * 断言 URL 的 e= 过期时间戳对齐「被测方法执行窗口」+ 指定有效期。
+     *
+     * <p>privateDownloadUrl 内部以 System.currentTimeMillis()/1000 + expireSeconds
+     * 计算 e=，因此真实 e 落在 [nowBefore, nowAfter] 快照区间 + expire 之内。
+     */
+    private static void assertExpireAlignsToWindow(String signedUrl, long expireSeconds,
+                                                   long nowSecBefore, long nowSecAfter) {
+        long actual = extractExpireSecs(signedUrl);
+        long low = nowSecBefore + expireSeconds;
+        long high = nowSecAfter + expireSeconds;
+        assertTrue(actual >= low && actual <= high,
+                "e= 过期时间戳 " + actual + " 应在 [" + low + ", " + high + "]（有效期 " + expireSeconds + "s），URL: " + signedUrl);
+    }
+
+    /**
+     * 自定义有效期：注入 qiniuUrlExpireSeconds 后，签名 URL 的 e= 必须反映
+     * 该自定义值（此处 1 小时），而非默认 30 天魔法数。
+     */
+    @Test
+    @DisplayName("自定义有效期(1小时)反映到签名URL的e=过期时间戳")
+    void uploadShouldReflectCustomUrlExpireSeconds() throws Exception {
+        setField(service, "qiniuUrlExpireSeconds", 3600L);
+
+        try (MockedConstruction<UploadManager> ignored =
+                     mockConstruction(UploadManager.class, (mock, ctx) -> {
+                         Response okResp = mock(Response.class);
+                         when(okResp.isOK()).thenReturn(true);
+                         DefaultPutRet putRet = new DefaultPutRet();
+                         putRet.key = "1788550499179.png";
+                         when(okResp.jsonToObject(DefaultPutRet.class)).thenReturn(putRet);
+                         when(mock.put(any(byte[].class), anyString(), anyString()))
+                                 .thenReturn(okResp);
+                     })) {
+
+            long nowSecBefore = System.currentTimeMillis() / 1000;
+            Result<String> result = service.uploadImage(PNG_BASE64);
+            long nowSecAfter = System.currentTimeMillis() / 1000;
+
+            assertEquals(ResponseCodeConstants.SUCCESS, result.getCode());
+            assertNotNull(result.getData());
+            // 1 小时（3600s）有效期：e = now + 3600，而非默认 30 天（2592000s）
+            assertExpireAlignsToWindow(result.getData(), 3600L, nowSecBefore, nowSecAfter);
+            // 自定义 1 小时 ≠ 默认 30 天，排除落到默认魔法数
+            long e = extractExpireSecs(result.getData());
+            assertFalse(e > nowSecAfter + 2592000L - 1,
+                    "自定义有效期应生效，不应落到默认 30 天窗口");
+        }
+    }
+
+    /**
+     * 默认值：未配置 url-expire-seconds 时（字段保持声明默认 30 天），
+     * e= 应对齐 now + 2592000（30 天），与 COS 分支行为一致，无行为倒退。
+     */
+    @Test
+    @DisplayName("默认有效期(30天)反映到签名URL的e=过期时间戳")
+    void uploadShouldUseDefaultThirtyDaysWhenUnset() {
+        // 默认字段即 DEFAULT_QINIU_URL_EXPIRE_SECONDS（2592000），不 set，模拟未配置
+        try (MockedConstruction<UploadManager> ignored =
+                     mockConstruction(UploadManager.class, (mock, ctx) -> {
+                         Response okResp = mock(Response.class);
+                         when(okResp.isOK()).thenReturn(true);
+                         DefaultPutRet putRet = new DefaultPutRet();
+                         putRet.key = "1788550499179.png";
+                         when(okResp.jsonToObject(DefaultPutRet.class)).thenReturn(putRet);
+                         when(mock.put(any(byte[].class), anyString(), anyString()))
+                                 .thenReturn(okResp);
+                     })) {
+
+            long nowSecBefore = System.currentTimeMillis() / 1000;
+            Result<String> result = service.uploadImage(PNG_BASE64);
+            long nowSecAfter = System.currentTimeMillis() / 1000;
+
+            assertEquals(ResponseCodeConstants.SUCCESS, result.getCode());
+            assertNotNull(result.getData());
+            // 默认 2592000s（30 天），与 COS 分支 30 天对齐
+            assertExpireAlignsToWindow(result.getData(), 2592000L, nowSecBefore, nowSecAfter);
+        }
+    }
+
+    /**
+     * 非法值兜底：注入 ≤0 的 url-expire-seconds（此处 0 与 -1）时，
+     * resolveUrlExpireSeconds() 应回退默认 30 天，而不是用 0/负有效期产生立即过期链接。
+     */
+    @Test
+    @DisplayName("有效期配置为非法值(<=0)时回退默认30天")
+    void uploadShouldFallbackToDefaultWhenExpireInvalid() throws Exception {
+        for (long invalid : new long[]{0L, -1L}) {
+            setField(service, "qiniuUrlExpireSeconds", invalid);
+
+            try (MockedConstruction<UploadManager> ignored =
+                         mockConstruction(UploadManager.class, (mock, ctx) -> {
+                             Response okResp = mock(Response.class);
+                             when(okResp.isOK()).thenReturn(true);
+                             DefaultPutRet putRet = new DefaultPutRet();
+                             putRet.key = "1788550499179.png";
+                             when(okResp.jsonToObject(DefaultPutRet.class)).thenReturn(putRet);
+                             when(mock.put(any(byte[].class), anyString(), anyString()))
+                                     .thenReturn(okResp);
+                         })) {
+
+                long nowSecBefore = System.currentTimeMillis() / 1000;
+                Result<String> result = service.uploadImage(PNG_BASE64);
+                long nowSecAfter = System.currentTimeMillis() / 1000;
+
+                assertEquals(ResponseCodeConstants.SUCCESS, result.getCode());
+                assertNotNull(result.getData());
+                // 非法值应回退默认 30 天
+                assertExpireAlignsToWindow(result.getData(), 2592000L, nowSecBefore, nowSecAfter);
+            }
+        }
+    }
+
 }

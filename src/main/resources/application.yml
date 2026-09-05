@@ -77,6 +77,8 @@ storage:
     secretKey: ${QINIU_SECRET_KEY:}
     bucket: ${QINIU_BUCKET:}
     domain: ${QINIU_DOMAIN:}
+    # 签名下载 URL 有效期（秒），默认 2592000（30 天）
+    url-expire-seconds: ${QINIU_URL_EXPIRE_SECONDS:2592000}
 
 inquisition:
   # JWT密钥：必须配置不少于32字符的随机字符串，否则启动时将拒绝启动

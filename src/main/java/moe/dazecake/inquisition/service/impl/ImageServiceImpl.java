@@ -29,6 +29,9 @@ import java.util.Date;
 @Service
 public class ImageServiceImpl implements ImageService {
 
+    /** 默认签名下载 URL 有效期（秒）：30 天。 */
+    private static final long DEFAULT_QINIU_URL_EXPIRE_SECONDS = 30L * 24 * 60 * 60;
+
     @Value("${storage.oss.enable:false}")
     private boolean ossEnable;
 
@@ -73,6 +76,10 @@ public class ImageServiceImpl implements ImageService {
 
     @Value("${storage.qiniu.domain:}")
     private String qiniuDomain;
+
+    /** 签名下载 URL 有效期（秒），默认 30 天；非法值（<=0）回退默认。 */
+    @Value("${storage.qiniu.url-expire-seconds:2592000}")
+    private long qiniuUrlExpireSeconds = DEFAULT_QINIU_URL_EXPIRE_SECONDS;
 
     @Override
     public Result<String> uploadImage(String base64Image) {
@@ -161,19 +168,27 @@ public class ImageServiceImpl implements ImageService {
 
             // 返回下载地址：先拼接域名 + key，再生成带签名的临时下载链接
             // 空间为私有访问模式时，公开 URL 会被 CDN 鉴权拦截（403），
-            // 需生成签名 URL，有效期 30 天，与 COS 分支保持一致
+            // 需生成签名 URL，有效期由 url-expire-seconds 配置决定（默认 30 天）
             String domain = qiniuDomain.trim();
             if (!domain.startsWith("http://") && !domain.startsWith("https://")) {
                 domain = "https://" + domain;
             }
             String publicUrl = domain.replaceAll("/+$", "") + "/" + putRet.key;
-            String fileUrl = auth.privateDownloadUrl(publicUrl, 30L * 24 * 60 * 60);
+            String fileUrl = auth.privateDownloadUrl(publicUrl, resolveUrlExpireSeconds());
             return Result.success(fileUrl, "上传成功");
         } catch (QiniuException e) {
             return Result.failed("七牛云上传异常: " + e.getMessage());
         } catch (IllegalArgumentException e) {
             return Result.failed("七牛云配置参数不合法: " + e.getMessage());
         }
+    }
+
+    /**
+     * 解析七牛签名下载 URL 有效期（秒）。
+     * 配置的 url-expire-seconds 非法（<=0）时回退默认 30 天。
+     */
+    private long resolveUrlExpireSeconds() {
+        return qiniuUrlExpireSeconds > 0 ? qiniuUrlExpireSeconds : DEFAULT_QINIU_URL_EXPIRE_SECONDS;
     }
 
     /**
