@@ -1,7 +1,9 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '2.7.0'
-    id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+    // Boot 2.7.18 为 2.7 线在公开 Maven 仓库的最高版本，包含该线已发布的安全修复。
+    // 注：CVE-2026-40972 官方修复版为 >2.7.32，属 Broadcom 商业支持渠道，公开仓库不可得（见 devtools 说明）。
+    id 'org.springframework.boot' version '2.7.18'
+    id 'io.spring.dependency-management' version '1.0.15.RELEASE'
 }
 
 // Spring Boot 2.7 BOM 管理 snakeyaml 1.x 线。升至 1.33 为 1.x 最新补丁，
@@ -25,19 +27,25 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-websocket:2.7.0'
-    // Spring Security Crypto：Boot 2.7 兼容线为 5.7.3。
-    // CVE-2025-22228 的 5.7 线开源修复版不可得（仅企业支持），6.4.4 需 Java 17。
-    // 保持 5.7.3 并在应用层增加密码≤72字节约束缓解（见 Encoder.java）。
-    implementation 'org.springframework.security:spring-security-crypto:5.7.3'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket:2.7.18'
+    // Spring Security Crypto：5.7.14 为 5.7 线公开 Maven 仓库最高版本。
+    // CVE-2025-22228 官方修复版 5.7.16 属商业支持渠道，公开仓库不可得；6.x 线需 Java 17。
+    // 应用层已强制 BCrypt 密码≤72字节（见 Encoder.java），该 CVE 在本项目中实际不可利用。
+    implementation 'org.springframework.security:spring-security-crypto:5.7.14'
     testImplementation 'junit:junit:4.13.1'
     testRuntimeOnly 'org.junit.vintage:junit-vintage-engine'
     compileOnly 'org.projectlombok:lombok:1.18.24'
-    // devtools 必须与 Boot 主版本保持一致（2.7.0），跨大版本混用会导致运行时类不兼容
-    developmentOnly 'org.springframework.boot:spring-boot-devtools:2.7.0'
-    runtimeOnly 'mysql:mysql-connector-java:8.0.29'
+    // devtools 必须与 Boot 主版本保持一致（2.7.18），跨大版本混用会导致运行时类不兼容。
+    // CVE-2026-40972（devtools 远程 secret 非恒定时间比较）修复版 >2.7.32 仅商业渠道可得，故取开源线最高 2.7.18。
+    // 实际风险已消除：该漏洞需启用 devtools 远程功能（spring.devtools.remote.secret），
+    // 本项目未配置该项即默认关闭；且 developmentOnly 依赖不会被 bootJar 打包，生产环境不含该组件。
+    developmentOnly 'org.springframework.boot:spring-boot-devtools:2.7.18'
+    // MySQL 驱动：旧坐标 mysql:mysql-connector-java 止于 8.0.33，Oracle 已迁移至 com.mysql:mysql-connector-j。
+    // MySQL Connectors 漏洞自 8.1.0 起修复，取 8.4.0（LTS 线，支持 Java 8+，
+    // 驱动类名仍为 com.mysql.cj.jdbc.Driver，与 druid 及现有配置兼容）。
+    runtimeOnly 'com.mysql:mysql-connector-j:8.4.0'
     annotationProcessor 'org.projectlombok:lombok:1.18.24'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test:2.7.0'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test:2.7.18'
     // 测试基座：七牛 Response/UploadManager 为 final 类或内部 new 构造，
     // 单测需隔离真实上传，须启用 inline mock maker 以 mock 构造与 final 类。
     testImplementation 'org.mockito:mockito-inline:4.5.1'
@@ -46,17 +54,18 @@ dependencies {
     implementation 'com.auth0:java-jwt:3.19.2'
     implementation 'commons-codec:commons-codec:1.15'
     implementation 'com.google.code.gson:gson:2.9.0'
-    implementation 'org.springframework.boot:spring-boot-starter-mail:2.7.0'
+    implementation 'org.springframework.boot:spring-boot-starter-mail:2.7.18'
     implementation 'com.gitee.sunchenbin.mybatis.actable:mybatis-enhance-actable:1.5.0.RELEASE'
     implementation 'com.alibaba:druid-spring-boot-starter:1.2.11'
     implementation 'com.zjiecode:wxpusher-java-sdk:2.1.4'
     implementation 'com.squareup.okhttp3:okhttp:4.10.0'
     // cos_api 传递引入 bcprov-jdk15on:1.67，该坐标已停止维护（1.72 起更名 bcprov-jdk18on），
-    // 排除旧坐标并显式引入新坐标 1.78，修复 CVE-2023-33201 与 CVE-2024-29857。
+    // 排除旧坐标并显式引入新坐标 1.84，修复 CVE-2023-33201、CVE-2024-29857，
+    // 以及 GOST 28147-2015 CTR 密钥流重用（<1.84）与 BC-JAVA LDAP 注入（<1.84）。
     implementation('com.qcloud:cos_api:5.6.105') {
         exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
     }
-    implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
     implementation 'com.qiniu:qiniu-java-sdk:7.19.0'
     implementation 'org.mapstruct:mapstruct:1.5.3.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.3.Final'
