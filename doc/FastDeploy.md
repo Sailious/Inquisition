@@ -133,11 +133,17 @@ Inquisition 的前端实现为 [IberiaEye 伊比利亚之眼](https://github.com
 
 默认的docker容器使用默认配置，如果您需要开启邮件推送或修改其他任意设置，需要进行[目录挂载](https://docker.easydoc.net/doc/81170005/cCewZWoN/kze7f0ZR)
 
-创建自定义配置文件 [配置文件参考](https://github.com/AegirTech/Inquisition/blob/main/src/main/resources/application.yml)
+创建自定义配置文件，直接复制项目根目录的 [application.yml.example](https://github.com/AegirTech/Inquisition/blob/main/application.yml.example) 并编辑
 
 ```shell
+cp application.yml.example /usr/local/inquisition/config/application.yml
 vim /usr/local/inquisition/config/application.yml
 ```
+
+编辑时至少确认以下内容：
+
+- `spring.datasource.url/username/password`：数据库地址、账号、密码（docker 网络部署时 `localhost` 需改为 MySQL 容器名/网络别名）
+- `inquisition.secret`：不少于 32 字符的随机字符串，否则应用拒绝启动
 
 编辑并保存，停止原先运行的容器，增加启动参数
 

@@ -73,7 +73,7 @@
 
 1. 密钥、URL、Token 一律通过 `@Value("${...}")` 注入，**禁止硬编码**。
 2. 日志**禁止**打印 `token`、`password`、`deviceToken`、CDK 明文。
-3. 新增配置项须同步至 `src/main/resources/application.yml` 与部署文档 `doc/FastDeploy.md`。
+3. 新增配置项须同步至项目根目录的 `application.yml.example` 与部署文档 `doc/FastDeploy.md`。
 
 ---
 
