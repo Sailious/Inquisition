@@ -18,6 +18,7 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Tag(name = "任务接口")
@@ -80,7 +81,7 @@ public class TaskController {
     @Login
     @Operation(summary = "查询已冻结任务列表")
     @GetMapping("/showFreezeTaskList")
-    public Result<HashMap<Long, LocalDateTime>> showFreezeTaskList() {
+    public Result<ConcurrentHashMap<Long, LocalDateTime>> showFreezeTaskList() {
         return Result.success(dynamicInfo.getFreezeUserInfoMap(), "查询成功");
     }
 

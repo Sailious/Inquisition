@@ -10,7 +10,7 @@ import moe.dazecake.inquisition.utils.Result;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Tag(name = "公告接口")
 @ResponseBody
@@ -33,7 +33,7 @@ public class NoticeController {
 
     @Operation(summary = "获取公告")
     @GetMapping("/getAnnouncement")
-    public Result<HashMap<String, String>> getAnnouncement() {
+    public Result<ConcurrentHashMap<String, String>> getAnnouncement() {
         return Result.success(dynamicInfo.getAnnouncement(), "获取成功");
     }
 

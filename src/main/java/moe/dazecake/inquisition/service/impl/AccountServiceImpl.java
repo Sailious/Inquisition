@@ -263,11 +263,12 @@ public class AccountServiceImpl implements AccountService {
         result.setTotal(data.getTotal());
 
         for (AccountEntity user : data.getRecords()) {
-            if (dynamicInfo.getUserSanInfoMap().containsKey(user.getId())) {
+            // 直接 get 判空，取代 containsKey + get 两步写法
+            var userSan = dynamicInfo.getUserSanInfoMap().get(user.getId());
+            if (userSan != null) {
                 result.getRecords().add(AccountConvert.INSTANCE.toAccountWithSanVO(
                         user,
-                        dynamicInfo.getUserSanInfoMap().get(user.getId()).getSan() + "/"
-                                + dynamicInfo.getUserSanInfoMap().get(user.getId()).getMaxSan()));
+                        userSan.getSan() + "/" + userSan.getMaxSan()));
             } else {
                 result.getRecords().add(AccountConvert.INSTANCE.toAccountWithSanVO(user, ""));
             }

@@ -259,11 +259,14 @@ public class UserServiceImpl implements UserService {
         }
 
 
-        if (!dynamicInfo.getUserSanInfoMap().containsKey(id)) {
+        // 直接 get 判空，取代 containsKey + get —— 两步之间存在竞态窗口，
+        // 期间条目可能已被移除，get 会返回 null
+        var userSan = dynamicInfo.getUserSanInfoMap().get(id);
+        if (userSan == null) {
             return Result.success(new UserStatusSTO("无法获取理智状态，请尝试使用立即作战重新校准理智"), "获取成功");
         } else {
-            var san = dynamicInfo.getUserSanInfoMap().get(id).getSan();
-            var maxSan = dynamicInfo.getUserSanInfoMap().get(id).getMaxSan();
+            var san = userSan.getSan();
+            var maxSan = userSan.getMaxSan();
             LocalDateTime nextTime = LocalDateTime.now()
                     .plusMinutes((maxSan - san) * 6L);
             String nextTimeStr = nextTime.format(DateTimeFormatter.ofPattern("HH:mm"));
@@ -281,14 +284,18 @@ public class UserServiceImpl implements UserService {
             ans = "作战失败正在冷却，稍后将自动重试";
         } else if (dynamicInfo.getWorkUserList().contains(id)) {
             ans = "等待作战结束以校准理智";
-        } else if (!dynamicInfo.getUserSanInfoMap().containsKey(id)) {
-            if (accountMapper.selectById(id).getFreeze() == 1) {
-                ans = "账号已被冻结，若需继续托管请先解冻";
-            } else {
-                ans = "出现严重错误，请立即使用立即作战以校准";
-            }
         } else {
-            ans = dynamicInfo.getUserSanInfoMap().get(id).getSan() + "/" + dynamicInfo.getUserSanInfoMap().get(id).getMaxSan();
+            // 直接 get 判空，取代 containsKey + get —— 两步之间存在竞态窗口
+            var userSan = dynamicInfo.getUserSanInfoMap().get(id);
+            if (userSan == null) {
+                if (accountMapper.selectById(id).getFreeze() == 1) {
+                    ans = "账号已被冻结，若需继续托管请先解冻";
+                } else {
+                    ans = "出现严重错误，请立即使用立即作战以校准";
+                }
+            } else {
+                ans = userSan.getSan() + "/" + userSan.getMaxSan();
+            }
         }
 
         return Result.success(ans, "获取成功");
