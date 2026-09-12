@@ -155,6 +155,44 @@ dazecake/inquisition:latest
 
 此时 Inquisition 将以自定义配置运行
 
+### 安全与 WAF
+
+应用内置一层**应用层 WAF**（`SecurityFilter`），在请求进入业务逻辑之前拦截自动化扫描，
+例如针对 `.env`、`.git`、`.azure/accessTokens.json` 的路径穿越探测。命中后直接返回 403，
+不回显路径、不读取请求体，因此不影响正常业务与图片上传。
+
+相关配置位于 `inquisition.security.waf`：
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 总开关，排障时可临时关闭 |
+| `trust-proxy` | `false` | 是否信任 `X-Forwarded-For` / `X-Real-IP`。**仅当部署在可信反向代理之后才开启**；直接暴露公网时开启会导致 IP 可伪造 |
+| `cors-on-deny` | `true` | 命中拦截时对白名单来源回写 CORS 头，便于前端区分"被拦截"与"网络故障" |
+
+**设计约束**（避免误伤正常业务）：
+
+- 只检查 URI 的 path，不检查 query string —— 业务参数中的 `..` 不会被误杀
+- 不读取请求体 —— 不影响 base64 图片上传，无额外 IO 开销
+- **放行 `OPTIONS`** —— 跨域预检必须放行，否则前端所有跨域写操作会失败
+- 部署在反向代理之后时，请将 `trust-proxy` 设为 `true`，否则日志里记录的都是代理 IP
+
+**已知边界**：把 TLS 握手（HTTPS 请求打到 HTTP 端口）或二进制协议探测发来的畸形请求，
+由 Tomcat 在协议层直接拒绝，**到不了应用层，本过滤器无法拦截**。这类请求会产生
+`Error parsing HTTP request header` 日志，可用以下任一方式处理：
+
+1. 配置 `logging.level.org.apache.coyote.http11: WARN` 抑制（配置模板中已默认启用）；
+2. 前置 Nginx 阻断，例如：
+
+   ```nginx
+   # 阻断路径穿越类探测
+   if ($request_uri ~* "\.\.") { return 403; }
+   ```
+
+3. 使用云 WAF（Cloudflare、腾讯 EdgeOne 等）在域名层拦截，同时兼顾 DDoS / CC 防护。
+
+> 生产环境建议至少采用 2 或 3：应用层 WAF 只能处理已进入 JVM 的请求，
+> 畸形请求与流量型攻击必须在边界处理。
+
 ### 升级
 
 ```shell

@@ -48,3 +48,7 @@ application-fixed.yml
 
 # IDE/工具会话数据（不入库）
 .codebuddy/
+.workbuddy/
+
+# 系统/编辑器垃圾目录（勿提交）
+.Trash-*/

@@ -22,7 +22,7 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 
 @Slf4j
 @Configuration
@@ -37,6 +37,17 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
 
     /** 日志清理单轮默认最多执行的批次数 */
     private static final int DEFAULT_LOG_CLEAN_MAX_BATCHES = 20;
+
+    /**
+     * 设备计数器触发"自动移除"的阈值。
+     *
+     * <p>计算依据：巡检任务每 5 秒执行一次，每次将计数器减 1。
+     * 5 天 = 432000 秒，432000 / 5 = 86400 次递减；
+     * 计数器从心跳写入的 3 开始递减，因此递减到 -86400 时约为 5 天。
+     *
+     * <p>注意：必须是负值。计数器是递减的，写成正数永远不会命中（历史遗留 bug）。
+     */
+    private static final int DEVICE_EXPIRE_COUNT = -86400;
 
     @Resource
     DynamicInfo dynamicInfo;
@@ -90,9 +101,12 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
         taskRegistrar.addTriggerTask(
                 () -> {
                     //log.info("正在巡检队列: " + LocalDateTime.now().toLocalTime());
-                    //检查等待队列中是否存在重复项，若存在删除多余的重复项
-                    LinkedHashSet<Long> set = new LinkedHashSet<>(dynamicInfo.getWaitUserList());
-                    dynamicInfo.setWaitUserList(new ArrayList<>(set));
+                    //检查等待队列中是否存在重复项，若存在则删除多余的重复项
+                    // 用 removeIf 替代 clear + addAll：CopyOnWriteArrayList 的 removeIf 是原子操作
+                    //（加锁后一次性替换底层数组），读者只会看到旧数组或新数组，不会看到中间的空队列；
+                    // 且无重复项时不产生任何写操作
+                    var seen = new HashSet<Long>();
+                    dynamicInfo.getWaitUserList().removeIf(id -> !seen.add(id));
                 },
                 triggerContext -> new CronTrigger("0 */1 * * * *").nextExecutionTime(triggerContext)
         );
@@ -107,13 +121,21 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
         //设备离线监控
         taskRegistrar.addTriggerTask(
                 () -> {
+                    // 本轮判定为超时、需移除的设备，先记录下来，遍历结束后统一处理
+                    ArrayList<String> expiredTokens = new ArrayList<>();
+
                     for (java.util.Map.Entry<String, Integer> count : dynamicInfo.getDeviceCounterMap().entrySet()) {
 
                         var token = count.getKey();
-                        var num = count.getValue();
 
-                        --num;
-                        dynamicInfo.getDeviceCounterMap().put(token, num);
+                        // 计数器递减：用 computeIfPresent 保证"读-改-写"原子。
+                        // 原先的 --num; put(...) 会与设备心跳线程（每 5 秒 put(token, 3)）相互覆盖，
+                        // 导致心跳被吞掉、设备被误判离线
+                        Integer num = dynamicInfo.getDeviceCounterMap().computeIfPresent(token, (k, v) -> v - 1);
+                        if (num == null) {
+                            // 已被其它线程移除，跳过
+                            continue;
+                        }
 
                         if (num == 0) {
                             dynamicInfo.getDeviceStatusMap().put(token, 0);
@@ -134,27 +156,37 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                                     + "设备token: " + device.getDeviceToken() + "\n"
                                     + "时间: " + LocalDateTime.now() + "\n");
 
-                        } else if (num == 86400) {
-                            //超时24h，移除设备
-                            dynamicInfo.getDeviceStatusMap().remove(token);
-                            dynamicInfo.getDeviceCounterMap().remove(token);
-
-                            var device = deviceMapper.selectOne(
-                                    Wrappers.<DeviceEntity>lambdaQuery()
-                                            .eq(DeviceEntity::getDeviceToken, token)
-                            );
-                            device.setDelete(1);
-                            deviceMapper.updateById(device);
-
-                            //记录日志
-                            logService.logWarn("设备移除", "设备名称: " + device.getDeviceName() + "\n" +
-                                    "设备token: " + device.getDeviceToken() + "\n");
-
-                            //邮件通知
-                            messageService.pushAdmin("[审判庭] 设备移除", "设备名称: " + device.getDeviceName() + "\n"
-                                    + "设备token: " + device.getDeviceToken() + "\n"
-                                    + "时间: " + LocalDateTime.now() + "\n");
+                        } else if (num == DEVICE_EXPIRE_COUNT) {
+                            //设备离线约5天，仅记录待移除，避免遍历过程中结构性修改集合
+                            expiredTokens.add(token);
                         }
+                    }
+
+                    // 移除离线约5天的设备：此时已退出遍历，可安全做结构性修改
+                    for (String token : expiredTokens) {
+                        dynamicInfo.getDeviceStatusMap().remove(token);
+                        dynamicInfo.getDeviceCounterMap().remove(token);
+
+                        var device = deviceMapper.selectOne(
+                                Wrappers.<DeviceEntity>lambdaQuery()
+                                        .eq(DeviceEntity::getDeviceToken, token)
+                        );
+                        if (device == null) {
+                            // 数据库中已无对应记录（可能已被手动删除），
+                            // 内存态已清理，跳过即可，避免 NPE 中断后续设备的处理
+                            continue;
+                        }
+                        device.setDelete(1);
+                        deviceMapper.updateById(device);
+
+                        //记录日志
+                        logService.logWarn("设备移除", "设备名称: " + device.getDeviceName() + "\n" +
+                                "设备token: " + device.getDeviceToken() + "\n");
+
+                        //邮件通知
+                        messageService.pushAdmin("[审判庭] 设备移除", "设备名称: " + device.getDeviceName() + "\n"
+                                + "设备token: " + device.getDeviceToken() + "\n"
+                                + "时间: " + LocalDateTime.now() + "\n");
                     }
                 },
                 triggerContext -> new CronTrigger("0/5 * * * * ?").nextExecutionTime(triggerContext)
@@ -168,10 +200,13 @@ public class DynamicScheduleTask implements SchedulingConfigurer {
                         int num = 0;
                         synchronized (dynamicInfo.getWorkUserList()) {
                             for (Long worker : dynamicInfo.getWorkUserList()) {
-                                if (!dynamicInfo.getWorkUserInfoMap().containsKey(worker)) {
+                                // 直接取过期时间判空，取代 containsKey + get 两步写法：
+                                // 两步之间存在竞态窗口，期间条目可能已被移除导致 get 返回 null
+                                var expireTime = dynamicInfo.getWorkUserExpireTime(worker);
+                                if (expireTime == null) {
                                     continue;
                                 }
-                                if (dynamicInfo.getWorkUserExpireTime(worker).isBefore(nowTime)) {
+                                if (expireTime.isBefore(nowTime)) {
                                     //记录日志
                                     logService.logWarn("任务超时", "");
                                     taskService.forceHaltTask(worker);

@@ -77,9 +77,9 @@ public class DeviceServiceImpl implements DeviceService {
         );
 
         for (DeviceEntity device : devices) {
-            if (!dynamicInfo.getDeviceStatusMap().containsKey(device.getDeviceToken())) {
-                dynamicInfo.getDeviceStatusMap().put(device.getDeviceToken(), 0);
-            }
+            // putIfAbsent 取代 containsKey + put：两步之间存在竞态窗口，
+            // 期间其它线程可能已写入，覆盖判断会失效
+            dynamicInfo.getDeviceStatusMap().putIfAbsent(device.getDeviceToken(), 0);
 
             var loadDevice = new LoadDevice();
             loadDevice.setId(device.getId());
@@ -124,7 +124,9 @@ public class DeviceServiceImpl implements DeviceService {
                 .like(DeviceEntity::getWorkScope, type.getType())
         );
         for (DeviceEntity device : deviceList) {
-            if (dynamicInfo.getDeviceStatusMap().get(device.getDeviceToken()) == 1) {
+            // get() 返回 Integer，直接与 int 字面量 == 比较会触发拆箱；
+            // 设备尚未回填状态（或已被巡检移除）时为 null → NPE。用 equals 判空安全
+            if (Integer.valueOf(1).equals(dynamicInfo.getDeviceStatusMap().get(device.getDeviceToken()))) {
                 return Result.success(true, "存在空闲设备");
             }
         }

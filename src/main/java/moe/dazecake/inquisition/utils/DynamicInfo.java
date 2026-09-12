@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Objects;
 
 @Slf4j
 @Component
@@ -86,9 +87,14 @@ public class DynamicInfo extends MemoryInfo {
                     it -> {
                         for (AccountEntity worker : workers) {
                             if (it.equals(worker.getId())) {
-                                lockTasks.add(new LockTask(workUserInfoMap.get(worker.getId()).getDeviceToken(),
-                                        worker,
-                                        workUserInfoMap.get(worker.getId()).getExpirationTime()));
+                                // 并发下条目可能已被 removeWorkUser 移除，必须判空；
+                                // 且只取一次，避免两次 get 拿到不同对象导致数据错配
+                                var workUser = workUserInfoMap.get(worker.getId());
+                                if (workUser != null) {
+                                    lockTasks.add(new LockTask(workUser.getDeviceToken(),
+                                            worker,
+                                            workUser.getExpirationTime()));
+                                }
                                 break;
                             }
                         }
@@ -113,15 +119,21 @@ public class DynamicInfo extends MemoryInfo {
         workUserInfoMap.remove(userId);
     }
 
-    //获取work过期时间
+    /**
+     * 获取 work 过期时间。
+     * 并发下条目可能已被移除，此时返回 null 由调用方处理，避免直接 NPE。
+     */
     public LocalDateTime getWorkUserExpireTime(Long userId) {
-        return workUserInfoMap.get(userId).getExpirationTime();
+        var workUser = workUserInfoMap.get(userId);
+        return workUser == null ? null : workUser.getExpirationTime();
     }
 
     //通过deviceToken获取userId
     public Long getUserIdByDeviceToken(String deviceToken) {
         for (Long id : workUserList) {
-            if (workUserInfoMap.get(id).getDeviceToken().equals(deviceToken)) {
+            var workUser = workUserInfoMap.get(id);
+            // 判空 + Objects.equals：任一为 null 都不会抛异常
+            if (workUser != null && Objects.equals(workUser.getDeviceToken(), deviceToken)) {
                 return id;
             }
         }
@@ -135,21 +147,24 @@ public class DynamicInfo extends MemoryInfo {
 
     //置空用户理智
     public void setUserSanZero(Long userId) {
-        if (!userSanInfoMap.containsKey(userId)) {
-            userSanInfoMap.put(userId, new UserSan(0, 135));
-        } else {
-            userSanInfoMap.get(userId).setSan(0);
-        }
+        // compute 保证"读-改-写"原子性，取代 containsKey + get + setSan 这个非原子组合。
+        // 且每次放入新对象而非原地 setSan —— 原地修改普通字段没有 happens-before 保证，
+        // 其它线程可能长期读到旧值
+        userSanInfoMap.compute(userId, (k, v) -> new UserSan(0, v == null ? 135 : v.getMaxSan()));
     }
 
     //增加用户理智
     public void addUserSan(Long userId, Integer san) {
-        if (userSanInfoMap.containsKey(userId)) {
-            userSanInfoMap.get(userId).setSan(userSanInfoMap.get(userId).getSan() + san);
-        } else {
+        if (!userSanInfoMap.containsKey(userId)) {
             log.warn("【审判庭】 存在未知用户的理智增加请求，用户ID：" + userId);
-            setUserSanZero(userId);
         }
+        // compute 保证原子：并发自增不会丢失更新；同样每次生成新对象保证可见性
+        userSanInfoMap.compute(userId, (k, v) -> {
+            if (v == null) {
+                return new UserSan(0, 135);
+            }
+            return new UserSan(v.getSan() + san, v.getMaxSan());
+        });
     }
 
 }

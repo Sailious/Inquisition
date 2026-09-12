@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Iterator;
 import java.util.Map;
@@ -80,8 +81,10 @@ public class TaskServiceImpl implements TaskService {
         }
 
         // 重复请求检查
+        // 并发下 workUserInfoMap 可能已被其它线程移除，必须判空后再解引用
         for (Long worker : dynamicInfo.getWorkUserList()) {
-            if (dynamicInfo.getWorkUserInfoMap().get(worker).getDeviceToken().equals(deviceToken)) {
+            var workUser = dynamicInfo.getWorkUserInfoMap().get(worker);
+            if (workUser != null && deviceToken.equals(workUser.getDeviceToken())) {
                 return Result.repeatSuccess(AccountConvert.INSTANCE.toAccountDTO(accountMapper.selectById(worker)),
                         "重复获取");
             }
@@ -93,16 +96,20 @@ public class TaskServiceImpl implements TaskService {
                 var account = new AccountEntity();
 
                 // 检查任务是否达到下发标准
-                var iterator = dynamicInfo.getWaitUserList().iterator();
+                // CopyOnWriteArrayList 的迭代器不支持 remove()（会抛 UnsupportedOperationException），
+                // 因此改为遍历快照收集待移除 id，遍历结束后统一 removeAll。
+                // 快照语义同时避免了遍历期间其它线程修改导致的 ConcurrentModificationException
+                var toRemove = new ArrayList<Long>();
                 var hit = false;
-                while (iterator.hasNext()) {
-                    account = accountMapper.selectById(iterator.next());
+
+                for (Long waiterId : dynamicInfo.getWaitUserList()) {
+                    account = accountMapper.selectById(waiterId);
 
                     // 删除检查
                     if (account.getDelete() == 1 || account.getExpireTime().isBefore(LocalDateTime.now())) {
                         dynamicInfo.getUserSanInfoMap().remove(account.getId());
                         dynamicInfo.getFreezeUserInfoMap().remove(account.getId());
-                        iterator.remove();
+                        toRemove.add(waiterId);
                         continue;
                     }
 
@@ -119,7 +126,7 @@ public class TaskServiceImpl implements TaskService {
 
                     // 时间检查，不在激活区间则跳转到下一个判断
                     if (!checkActivationTime(account)) {
-                        iterator.remove();
+                        toRemove.add(waiterId);
                         continue;
                     }
 
@@ -141,7 +148,7 @@ public class TaskServiceImpl implements TaskService {
                     AccountEntity finalAccount = account;
                     if (dynamicInfo.getWorkUserList().stream()
                             .anyMatch(worker -> worker.equals(finalAccount.getId()))) {
-                        iterator.remove();
+                        toRemove.add(waiterId);
                         continue;
                     }
 
@@ -154,7 +161,10 @@ public class TaskServiceImpl implements TaskService {
 
                 // 检查是已经遍历完整个列表
                 if (!hit) {
-                    // 没有可用的任务
+                    // 没有可用的任务，顺带清理本轮判定失效的条目
+                    if (!toRemove.isEmpty()) {
+                        dynamicInfo.getWaitUserList().removeAll(toRemove);
+                    }
                     return Result.success("没有可用的任务");
                 }
 
@@ -167,8 +177,9 @@ public class TaskServiceImpl implements TaskService {
                 // 推送消息
                 messageService.push(account, "任务开始", "请勿强行顶号，强行顶号将导致轮空");
 
-                // 移出等待队列
-                iterator.remove();
+                // 移出等待队列：本轮判定失效的条目 + 本次选中的账号
+                toRemove.add(account.getId());
+                dynamicInfo.getWaitUserList().removeAll(toRemove);
 
                 // 理智归零
                 dynamicInfo.setUserSanZero(account.getId());
@@ -339,8 +350,11 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Result<String> forceUnlockTaskList() {
+        // 清空队列及其映射表。
+        // 注意：getAllWorkUserInfo() 返回的是方法内部新建的局部集合，对它 clear() 毫无效果，
+        // 必须直接清空 workUserInfoMap，否则映射表会残留条目（表现为"队列已空但任务信息还在"）
         dynamicInfo.getWorkUserList().clear();
-        dynamicInfo.getAllWorkUserInfo().clear();
+        dynamicInfo.getWorkUserInfoMap().clear();
 
         // 记录日志
         logService.logInfo("强制解锁", "管理员强制解锁释放整个上锁队列");
@@ -670,8 +684,13 @@ public class TaskServiceImpl implements TaskService {
             // 递增用户理智
             dynamicInfo.addUserSan(id, 1);
 
-            var san = dynamicInfo.getUserSanInfoMap().get(id).getSan();
-            var maxSan = dynamicInfo.getUserSanInfoMap().get(id).getMaxSan();
+            var userSan = dynamicInfo.getUserSanInfoMap().get(id);
+            if (userSan == null) {
+                // 并发下条目已被移除，跳过该账号，避免 NPE 中断整个理智刷新
+                continue;
+            }
+            var san = userSan.getSan();
+            var maxSan = userSan.getMaxSan();
 
             // 检查是否到达阈值 阈值为最大值-40
             if (san >= maxSan - 40) {
