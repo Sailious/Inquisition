@@ -95,6 +95,18 @@ inquisition:
     #   填具体域名 = 白名单模式
     #   留空       = 仅允许同源访问
     allowed-origins:
+  # 应用层 WAF：拦截自动化扫描（如针对 .env / .git / .azure 的路径穿越探测）
+  security:
+    waf:
+      # 总开关：true = 在请求进入业务逻辑之前拦截可疑扫描，直接返回 403
+      enabled: true
+      # 是否信任 X-Forwarded-For / X-Real-IP 取客户端真实 IP。
+      # 仅当部署在可信反向代理（Nginx / 负载均衡）之后才开启 —— 该头可被伪造，
+      # 直接暴露在公网时必须保持 false
+      trust-proxy: false
+      # 命中拦截时，对白名单内的来源回写 CORS 响应头。
+      # 开启后前端能区分"被安全策略拦截"与"网络故障"；关闭则前端只会看到网络错误
+      cors-on-deny: true
   # 每日价格
   price:
     daily: 1.0
@@ -121,3 +133,12 @@ inquisition:
       # 单轮最多执行的批次数，剩余部分留待下一轮
       # 避免长时间独占调度线程而阻塞其它高频定时任务
       max-batches: 20
+
+# 日志级别
+# org.apache.coyote.http11 调为 WARN，用于抑制畸形请求的日志噪音：
+# 扫描器常把 TLS 握手（0x16 0x03 ...）或其它二进制协议打到 HTTP 端口，
+# Tomcat 在协议层拒绝时会以 INFO 打印 "Error parsing HTTP request header" 及完整堆栈。
+# 这类请求根本到不了应用层，过滤器无法拦截，只能抑制日志。
+logging:
+  level:
+    org.apache.coyote.http11: WARN
