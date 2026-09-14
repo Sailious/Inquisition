@@ -137,9 +137,12 @@ MAVEN_EOF
 # spring-boot 插件的缓存写入 /root/.gradle，任务中首次 ./gradlew 即离线级速度。
 # 预热失败不致命（仅告警），镜像仍可用，任务首次会在线补齐。
 COPY gradlew gradle build.gradle settings.gradle /tmp/prewarm/
+# 同时预热 test 配置：测试工程师会在任务中跑 ./gradlew test，
+# testImplementation 依赖（junit / mockito-inline / h2 测试库）不在 dependencies 任务范围内，
+# 不预热则首次 test 仍需在线下载，拖慢验证。
 RUN cd /tmp/prewarm \
     && chmod +x gradlew \
-    && (timeout 600 ./gradlew --no-daemon --console=plain dependencies || \
+    && (timeout 900 ./gradlew --no-daemon --console=plain dependencies testClasses || \
         echo "WARN: gradle 依赖预热失败，镜像仍可用（首次任务会在线下载）") \
     && cd / && rm -rf /tmp/prewarm
 
